@@ -3,11 +3,12 @@
 
 Option Explicit
 
-Dim WshShell, FSO, AppPath, Http, LocalTimestamp, RemoteTimestamp, RemoteCommit
+Dim WshShell, FSO, AppPath, Http, LocalTimestamp, RemoteTimestamp, RemoteCommit, StatusFile
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 
 AppPath = FSO.GetParentFolderName(WScript.ScriptFullName)
+StatusFile = WshShell.ExpandEnvironmentStrings("%TEMP%") & "\llm-multichat-status.txt"
 
 ' === KONFIGURATION ===
 Const GITHUB_API = "https://api.github.com/repos/3Dcut/multiLLM/commits/main"
@@ -55,6 +56,36 @@ Function DownloadFile(url, destPath)
     On Error GoTo 0
 End Function
 
+' --- Status Funktionen ---
+
+Sub WriteStatus(msg)
+    Dim file
+    Set file = FSO.CreateTextFile(StatusFile, True)
+    file.WriteLine "VERSION:LLM MultiChat"
+    file.WriteLine "STATUS:" & msg
+    file.Close
+End Sub
+
+Sub CloseStatus()
+    Dim file
+    Set file = FSO.CreateTextFile(StatusFile, True)
+    file.WriteLine "CLOSE"
+    file.Close
+    WScript.Sleep 500
+    On Error Resume Next
+    FSO.DeleteFile StatusFile
+    On Error GoTo 0
+End Sub
+
+Sub StartStatusWindow()
+    Dim htaPath
+    htaPath = AppPath & "\status.hta"
+    If FSO.FileExists(htaPath) Then
+        WshShell.Run "mshta """ & htaPath & """", 1, False
+        WScript.Sleep 500
+    End If
+End Sub
+
 ' --- Version/Update Funktionen ---
 
 Function ReadLocalTimestamp()
@@ -89,7 +120,6 @@ Function GetGitHubCommitInfo()
     json = DownloadString(GITHUB_API)
     
     If Len(json) > 0 Then
-        ' SHA extrahieren
         Dim regex
         Set regex = New RegExp
         regex.Pattern = """sha""\s*:\s*""([^""]+)"""
@@ -99,7 +129,6 @@ Function GetGitHubCommitInfo()
             RemoteCommit = matches(0).SubMatches(0)
         End If
         
-        ' Datum extrahieren
         Set dateMatch = New RegExp
         dateMatch.Pattern = """date""\s*:\s*""(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?)"""
         dateMatch.Global = True
@@ -134,14 +163,18 @@ Sub DownloadAllFiles()
     )
     
     For Each file In files
+        WriteStatus "Lade " & file & "..."
         DownloadFile GITHUB_RAW & "/" & file, AppPath & "\" & file
     Next
 End Sub
 
 Sub DownloadEssentialFiles()
-    ' Nur fuer Disclaimer noetige Dateien
     DownloadFile GITHUB_RAW & "/disclaimer.hta", AppPath & "\disclaimer.hta"
     DownloadFile GITHUB_RAW & "/security-report.pdf", AppPath & "\security-report.pdf"
+End Sub
+
+Sub DownloadStatusHta()
+    DownloadFile GITHUB_RAW & "/status.hta", AppPath & "\status.hta"
 End Sub
 
 Sub InitializeConfigs()
@@ -219,17 +252,18 @@ Sub InstallNodeJS()
     InstallerPath = TempPath & "\node_setup.msi"
     DownloadUrl = "https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi"
     
-    MsgBox "Node.js wird heruntergeladen..." & vbCrLf & "Dies kann einige Minuten dauern.", vbInformation, "LLM MultiChat"
+    WriteStatus "Node.js wird heruntergeladen..."
     
     result = WshShell.Run("powershell -WindowStyle Hidden -Command ""[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " & _
                           "Invoke-WebRequest -Uri '" & DownloadUrl & "' -OutFile '" & InstallerPath & "' -UseBasicParsing""", 0, True)
     
     If result <> 0 Or Not FSO.FileExists(InstallerPath) Then
+        CloseStatus
         MsgBox "Download fehlgeschlagen!" & vbCrLf & vbCrLf & "Bitte Node.js manuell installieren: https://nodejs.org/", vbCritical, "Fehler"
         WScript.Quit 1
     End If
     
-    MsgBox "Node.js wird installiert...", vbInformation, "LLM MultiChat"
+    WriteStatus "Node.js wird installiert..."
     result = WshShell.Run("msiexec /i """ & InstallerPath & """ /passive", 1, True)
     
     On Error Resume Next
@@ -237,6 +271,7 @@ Sub InstallNodeJS()
     On Error GoTo 0
     
     If result <> 0 Then
+        CloseStatus
         MsgBox "Installation fehlgeschlagen!", vbCritical, "Fehler"
         WScript.Quit 1
     End If
@@ -247,7 +282,7 @@ Sub InstallNodeJS()
 End Sub
 
 Sub InstallDependencies()
-    MsgBox "Module werden installiert..." & vbCrLf & "Dies kann 1-2 Minuten dauern.", vbInformation, "LLM MultiChat"
+    WriteStatus "Module werden installiert (1-2 Min)..."
     WshShell.Run "cmd /c cd /d """ & AppPath & """ && npm install >nul 2>&1", 0, True
 End Sub
 
@@ -262,7 +297,6 @@ Sub Main()
             MsgBox "Keine Internetverbindung!" & vbCrLf & "Erstinstallation nicht moeglich.", vbCritical, "Fehler"
             WScript.Quit 1
         End If
-        ' Offline-Start ohne Update
         WshShell.CurrentDirectory = AppPath
         WshShell.Run "cmd /c npm start", 0, False
         Exit Sub
@@ -272,7 +306,7 @@ Sub Main()
     isFirstInstall = Not FSO.FileExists(AppPath & "\main.js")
     needsUpdate = (RemoteTimestamp > LocalTimestamp)
     
-    ' Bei Erstinstallation oder Update: Disclaimer-Dateien zuerst laden
+    ' Bei Erstinstallation: Disclaimer-Dateien zuerst laden
     If isFirstInstall Or (needsUpdate And Not HasAcceptedDisclaimer()) Then
         DownloadEssentialFiles
     End If
@@ -285,27 +319,38 @@ Sub Main()
         End If
     End If
     
+    ' Status-Fenster laden und starten
+    If isFirstInstall Or needsUpdate Then
+        DownloadStatusHta
+        StartStatusWindow
+    End If
+    
     ' Erstinstallation
     If isFirstInstall Then
-        MsgBox "Erstinstallation wird durchgefuehrt...", vbInformation, "LLM MultiChat"
+        WriteStatus "Erstinstallation..."
         DownloadAllFiles
         InitializeConfigs
         SaveUpdateInfo RemoteTimestamp, RemoteCommit
     ' Update
     ElseIf needsUpdate Then
+        CloseStatus
         response = MsgBox("Update verfuegbar!" & vbCrLf & vbCrLf & _
                           "Neu: " & FormatTimestamp(RemoteTimestamp) & vbCrLf & _
                           "Aktuell: " & FormatTimestamp(LocalTimestamp) & vbCrLf & vbCrLf & _
                           "Jetzt aktualisieren?", vbYesNo + vbQuestion, "LLM MultiChat")
         
         If response = vbYes Then
+            StartStatusWindow
+            WriteStatus "Update wird installiert..."
             DownloadAllFiles
             SaveUpdateInfo RemoteTimestamp, RemoteCommit
-            MsgBox "Update abgeschlossen!", vbInformation, "LLM MultiChat"
             
             If FSO.FolderExists(AppPath & "\node_modules") Then
+                CloseStatus
                 response = MsgBox("Node-Module aktualisieren?", vbYesNo + vbQuestion, "LLM MultiChat")
                 If response = vbYes Then
+                    StartStatusWindow
+                    WriteStatus "Loesche alte Module..."
                     On Error Resume Next
                     FSO.DeleteFolder AppPath & "\node_modules", True
                     On Error GoTo 0
@@ -318,15 +363,21 @@ Sub Main()
     
     ' Node.js pruefen
     If Not CommandExists("node") Then
+        If Not FSO.FileExists(AppPath & "\status.hta") Then
+            DownloadStatusHta
+        End If
+        CloseStatus
         response = MsgBox("Node.js ist nicht installiert." & vbCrLf & vbCrLf & _
                           "Jetzt installieren?", vbYesNo + vbQuestion, "LLM MultiChat")
         If response = vbNo Then
             MsgBox "Bitte Node.js manuell installieren: https://nodejs.org/", vbInformation, "LLM MultiChat"
             WScript.Quit 0
         End If
+        StartStatusWindow
         InstallNodeJS
         
         If Not CommandExists("node") Then
+            CloseStatus
             MsgBox "Bitte PC neu starten und erneut versuchen.", vbInformation, "LLM MultiChat"
             WScript.Quit 0
         End If
@@ -334,10 +385,19 @@ Sub Main()
     
     ' Dependencies pruefen
     If Not FSO.FileExists(AppPath & "\node_modules\.bin\electron.cmd") Then
+        If Not FSO.FileExists(AppPath & "\status.hta") Then
+            DownloadStatusHta
+        End If
+        StartStatusWindow
         InstallDependencies
     End If
     
-    ' App starten
+    ' Status schliessen und App starten
+    CloseStatus
+    WriteStatus "Starte LLM MultiChat..."
+    WScript.Sleep 500
+    CloseStatus
+    
     WshShell.CurrentDirectory = AppPath
     WshShell.Run "cmd /c npm start", 0, False
 End Sub
