@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LLM MultiChat - Deinstallation</title>
+    <HTA:APPLICATION
+        ID="UninstallWindow"
+        APPLICATIONNAME="LLM MultiChat Uninstall"
+        BORDER="dialog"
+        BORDERSTYLE="normal"
+        CAPTION="yes"
+        SHOWINTASKBAR="yes"
+        SINGLEINSTANCE="yes"
+        SYSMENU="yes"
+        WINDOWSTATE="normal"
+        SCROLL="no"
+    />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            font-size: 13px;
+        }
+        h1 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #dc3545;
+            border-bottom: 2px solid #dc3545;
+            padding-bottom: 10px;
+        }
+        .option {
+            background: white;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .option:hover {
+            border-color: #6366f1;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+        }
+        .option.selected {
+            border-color: #dc3545;
+            background: #fff5f5;
+        }
+        .option input {
+            margin-right: 10px;
+            width: 16px;
+            height: 16px;
+        }
+        .option label {
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .option .desc {
+            margin-left: 26px;
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 10px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .btn {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .btn-cancel {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-uninstall {
+            background: #dc3545;
+            color: white;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            display: none;
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+        }
+        #status .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ccc;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        var fso, shell, appPath;
+        
+        window.resizeTo(500, 480);
+        window.moveTo((screen.width - 500) / 2, (screen.height - 480) / 2);
+        
+        try {
+            fso = new ActiveXObject("Scripting.FileSystemObject");
+            shell = new ActiveXObject("WScript.Shell");
+            
+            var fullPath = window.location.pathname;
+            if (fullPath.charAt(0) === '/') fullPath = fullPath.substring(1);
+            fullPath = fullPath.replace(/\//g, '\\');
+            fullPath = unescape(fullPath);
+            appPath = fso.GetParentFolderName(fullPath);
+        } catch(e) {
+            alert("Fehler: " + e.message);
+        }
+        
+        function updateSelection() {
+            var options = document.querySelectorAll('.option');
+            options.forEach(function(opt) {
+                var radio = opt.querySelector('input[type="radio"]');
+                if (radio && radio.checked) {
+                    opt.classList.add('selected');
+                } else {
+                    opt.classList.remove('selected');
+                }
+            });
+            document.getElementById('btnUninstall').disabled = false;
+        }
+        
+        function getSelectedOption() {
+            var radios = document.getElementsByName('uninstallOption');
+            for (var i = 0; i < radios.length; i++) {
+                if (radios[i].checked) return radios[i].value;
+            }
+            return null;
+        }
+        
+        function showStatus(msg) {
+            document.getElementById('statusText').innerText = msg;
+            document.getElementById('status').style.display = 'block';
+        }
+        
+        function deleteFolder(path) {
+            try {
+                if (fso.FolderExists(path)) {
+                    fso.DeleteFolder(path, true);
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+        
+        function deleteFile(path) {
+            try {
+                if (fso.FileExists(path)) {
+                    fso.DeleteFile(path, true);
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+        
+        function doUninstall() {
+            var option = getSelectedOption();
+            if (!option) {
+                alert("Bitte eine Option auswählen.");
+                return;
+            }
+            
+            var confirmMsg = "";
+            switch(option) {
+                case "userdata":
+                    confirmMsg = "Nutzerdaten und App-Dateien werden gelöscht.\nSetup-Dateien bleiben erhalten.";
+                    break;
+                case "deps":
+                    confirmMsg = "Node-Module (node_modules) werden gelöscht.\nBei Neustart werden sie erneut heruntergeladen.";
+                    break;
+                case "npm":
+                    confirmMsg = "npm wird deinstalliert.\nNode.js bleibt installiert.";
+                    break;
+                case "nodejs":
+                    confirmMsg = "Node.js wird komplett deinstalliert.\nnpm wird ebenfalls entfernt.";
+                    break;
+                case "complete":
+                    confirmMsg = "ALLES wird gelöscht:\n- Alle App-Dateien\n- node_modules\n- Node.js\n\nDieser Vorgang kann nicht rückgängig gemacht werden!";
+                    break;
+            }
+            
+            if (!confirm("Fortfahren?\n\n" + confirmMsg)) return;
+            
+            document.getElementById('optionsContainer').style.display = 'none';
+            document.querySelector('.buttons').style.display = 'none';
+            
+            switch(option) {
+                case "userdata":
+                    uninstallUserdata();
+                    break;
+                case "deps":
+                    uninstallDeps();
+                    break;
+                case "npm":
+                    uninstallNpm();
+                    break;
+                case "nodejs":
+                    uninstallNodejs();
+                    break;
+                case "complete":
+                    uninstallComplete();
+                    break;
+            }
+        }
+        
+        function uninstallUserdata() {
+            showStatus("Lösche Nutzerdaten...");
+            
+            // Setup-Dateien die bleiben sollen
+            var keepFiles = ["Start.vbs", "update.vbs", "status.hta", "disclaimer.hta", "Uninstall.hta"];
+            
+            // Alle anderen Dateien löschen
+            var folder = fso.GetFolder(appPath);
+            var files = new Enumerator(folder.Files);
+            for (; !files.atEnd(); files.moveNext()) {
+                var fileName = files.item().Name;
+                var keep = false;
+                for (var i = 0; i < keepFiles.length; i++) {
+                    if (fileName.toLowerCase() === keepFiles[i].toLowerCase()) {
+                        keep = true;
+                        break;
+                    }
+                }
+                if (!keep) {
+                    deleteFile(files.item().Path);
+                }
+            }
+            
+            // node_modules löschen
+            deleteFolder(appPath + "\\node_modules");
+            
+            showStatus("Nutzerdaten gelöscht.");
+            setTimeout(function() {
+                alert("Nutzerdaten wurden entfernt.\nSetup-Dateien bleiben erhalten.");
+                window.close();
+            }, 500);
+        }
+        
+        function uninstallDeps() {
+            showStatus("Lösche node_modules...");
+            deleteFolder(appPath + "\\node_modules");
+            showStatus("Dependencies gelöscht.");
+            setTimeout(function() {
+                alert("node_modules wurde gelöscht.\nBei Neustart werden Module erneut installiert.");
+                window.close();
+            }, 500);
+        }
+        
+        function uninstallNpm() {
+            showStatus("Deinstalliere npm...");
+            // npm kann nicht einzeln deinstalliert werden, es ist Teil von Node.js
+            alert("npm ist Teil von Node.js und kann nicht separat deinstalliert werden.\n\nBitte 'Node.js entfernen' wählen.");
+            window.location.reload();
+        }
+        
+        function uninstallNodejs() {
+            showStatus("Deinstalliere Node.js...");
+            
+            // Node.js über Windows deinstallieren
+            shell.Run('msiexec /x {NODE_UNINSTALL_GUID} /passive', 1, false);
+            
+            // Alternative: Über Systemsteuerung
+            alert("Node.js Deinstallation wurde gestartet.\n\nFalls das nicht funktioniert:\nSystemsteuerung → Programme deinstallieren → Node.js");
+            window.close();
+        }
+        
+        function uninstallComplete() {
+            showStatus("Komplette Deinstallation...");
+            
+            // 1. Node.js deinstallieren
+            showStatus("Deinstalliere Node.js...");
+            try {
+                shell.Run('powershell -Command "Get-WmiObject Win32_Product | Where-Object { $_.Name -like \'*Node*\' } | ForEach-Object { $_.Uninstall() }"', 0, true);
+            } catch(e) {}
+            
+            // 2. Selbstlöschungs-Batch erstellen
+            showStatus("Erstelle Cleanup-Script...");
+            var batchPath = shell.ExpandEnvironmentStrings("%TEMP%") + "\\llm-multichat-cleanup.bat";
+            var batch = fso.CreateTextFile(batchPath, true);
+            batch.WriteLine("@echo off");
+            batch.WriteLine("timeout /t 2 /nobreak >nul");
+            batch.WriteLine("rd /s /q \"" + appPath + "\"");
+            batch.WriteLine("del \"%~f0\"");
+            batch.Close();
+            
+            // 3. Batch starten und HTA schließen
+            shell.Run('"' + batchPath + '"', 0, false);
+            
+            alert("Deinstallation abgeschlossen.\n\nDer Ordner wird in wenigen Sekunden gelöscht.");
+            window.close();
+        }
+        
+        function doCancel() {
+            window.close();
+        }
+    </script>
+</head>
+<body>
+    <h1>🗑️ LLM MultiChat - Deinstallation</h1>
+    
+    <div id="optionsContainer">
+        <div class="option" onclick="document.getElementById('opt1').checked=true; updateSelection();">
+            <input type="radio" name="uninstallOption" id="opt1" value="userdata" onclick="updateSelection()">
+            <label for="opt1">Nutzerdaten entfernen</label>
+            <div class="desc">Löscht alle Dateien außer Setup-Skripten (Start.vbs, update.vbs, etc.)</div>
+        </div>
+        
+        <div class="option" onclick="document.getElementById('opt2').checked=true; updateSelection();">
+            <input type="radio" name="uninstallOption" id="opt2" value="deps" onclick="updateSelection()">
+            <label for="opt2">Dependencies entfernen</label>
+            <div class="desc">Löscht nur node_modules (~150 MB). Werden bei Neustart erneut heruntergeladen.</div>
+        </div>
+        
+        <div class="option" onclick="document.getElementById('opt3').checked=true; updateSelection();">
+            <input type="radio" name="uninstallOption" id="opt3" value="nodejs" onclick="updateSelection()">
+            <label for="opt3">Node.js entfernen</label>
+            <div class="desc">Deinstalliert Node.js komplett vom System (inkl. npm).</div>
+        </div>
+        
+        <div class="option" onclick="document.getElementById('opt4').checked=true; updateSelection();">
+            <input type="radio" name="uninstallOption" id="opt4" value="complete" onclick="updateSelection()">
+            <label for="opt4">Komplett deinstallieren</label>
+            <div class="desc">Entfernt ALLES: App-Dateien, node_modules, Node.js. Zustand vor Installation.</div>
+        </div>
+        
+        <div class="warning">
+            ⚠️ <strong>Achtung:</strong> Gelöschte Daten können nicht wiederhergestellt werden!
+        </div>
+    </div>
+    
+    <div id="status">
+        <span class="spinner"></span>
+        <span id="statusText">Bitte warten...</span>
+    </div>
+    
+    <div class="buttons">
+        <button class="btn btn-cancel" onclick="doCancel()">Abbrechen</button>
+        <button class="btn btn-uninstall" id="btnUninstall" onclick="doUninstall()" disabled>Deinstallieren</button>
+    </div>
+</body>
+</html>

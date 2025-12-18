@@ -1,17 +1,67 @@
 ' LLM MultiChat - All-in-One Starter
-' 1. Status-Fenster anzeigen
+' 1. Disclaimer anzeigen (bei Erststart)
 ' 2. Update pruefen
 ' 3. Setup pruefen (Node.js, node_modules)
 ' 4. App starten
 
 Option Explicit
 
-Dim WshShell, FSO, AppPath, Result, StatusFile
+Dim WshShell, FSO, AppPath, Result, StatusFile, DisclaimerResult
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 
 AppPath = FSO.GetParentFolderName(WScript.ScriptFullName)
 StatusFile = WshShell.ExpandEnvironmentStrings("%TEMP%") & "\llm-multichat-status.txt"
+DisclaimerResult = WshShell.ExpandEnvironmentStrings("%TEMP%") & "\llm-multichat-disclaimer.txt"
+
+' --- Disclaimer-Funktionen ---
+
+Function HasAcceptedDisclaimer()
+    ' Prueft ob Disclaimer bereits akzeptiert wurde
+    HasAcceptedDisclaimer = FSO.FileExists(AppPath & "\disclaimer-accepted.txt")
+End Function
+
+Function ShowDisclaimer()
+    Dim htaPath, file, result
+    htaPath = AppPath & "\disclaimer.hta"
+    
+    ' Alte Ergebnis-Datei loeschen
+    On Error Resume Next
+    FSO.DeleteFile DisclaimerResult
+    On Error GoTo 0
+    
+    If Not FSO.FileExists(htaPath) Then
+        ' Fallback wenn HTA fehlt
+        result = MsgBox("WARNUNG: Diese Software wurde zu 100% von KI generiert!" & vbCrLf & vbCrLf & _
+                        "Der Code ist ungeprüft. Nutzung auf eigene Gefahr." & vbCrLf & vbCrLf & _
+                        "Fortfahren?", vbYesNo + vbExclamation, "LLM MultiChat - Disclaimer")
+        ShowDisclaimer = (result = vbYes)
+        Exit Function
+    End If
+    
+    ' HTA anzeigen und warten
+    WshShell.Run "mshta """ & htaPath & """", 1, True
+    
+    ' Ergebnis lesen
+    If FSO.FileExists(DisclaimerResult) Then
+        Set file = FSO.OpenTextFile(DisclaimerResult, 1)
+        result = Trim(file.ReadLine())
+        file.Close
+        FSO.DeleteFile DisclaimerResult
+        
+        If result = "ACCEPTED" Then
+            ' Akzeptanz speichern
+            Set file = FSO.CreateTextFile(AppPath & "\disclaimer-accepted.txt", True)
+            file.WriteLine "Akzeptiert am: " & Now()
+            file.Close
+            ShowDisclaimer = True
+        Else
+            ShowDisclaimer = False
+        End If
+    Else
+        ShowDisclaimer = False
+    End If
+End Function
 
 ' --- Status-Funktionen ---
 
@@ -37,14 +87,19 @@ End Sub
 
 Function ReadVersion()
     On Error Resume Next
-    Dim versionPath, file
-    versionPath = AppPath & "\version.txt"
-    If FSO.FileExists(versionPath) Then
-        Set file = FSO.OpenTextFile(versionPath, 1)
-        ReadVersion = Trim(file.ReadLine())
+    Dim infoPath, file, line
+    infoPath = AppPath & "\update-info.txt"
+    ReadVersion = "Neu"
+    
+    If FSO.FileExists(infoPath) Then
+        Set file = FSO.OpenTextFile(infoPath, 1)
+        Do While Not file.AtEndOfStream
+            line = file.ReadLine()
+            If Left(line, 10) = "TIMESTAMP:" Then
+                ReadVersion = Mid(line, 11, 10) ' Nur Datum
+            End If
+        Loop
         file.Close
-    Else
-        ReadVersion = "1.0.0"
     End If
     On Error GoTo 0
 End Function
@@ -124,44 +179,13 @@ End Sub
 Sub InstallDependencies()
     WriteStatus "Module werden installiert..."
     
-    Dim LogFile
-    LogFile = AppPath & "\npm-install.log"
-    
-    ' npm install mit Output in Log-Datei
-    Result = WshShell.Run("cmd /c cd /d """ & AppPath & """ && npm install > """ & LogFile & """ 2>&1", 0, True)
+    Result = WshShell.Run("cmd /c cd /d """ & AppPath & """ && npm install >nul 2>&1", 0, True)
     
     If Result <> 0 Then
         CloseStatusWindow
-        
-        ' Log-Datei lesen und anzeigen
-        Dim LogContent, Response
-        LogContent = ""
-        On Error Resume Next
-        If FSO.FileExists(LogFile) Then
-            Dim file
-            Set file = FSO.OpenTextFile(LogFile, 1)
-            LogContent = file.ReadAll()
-            file.Close
-        End If
-        On Error GoTo 0
-        
-        ' Fehler anzeigen mit Option Log zu oeffnen
-        Response = MsgBox("Installation fehlgeschlagen!" & vbCrLf & vbCrLf & _
-                          "Fehlerdetails wurden gespeichert in:" & vbCrLf & _
-                          LogFile & vbCrLf & vbCrLf & _
-                          "Log-Datei jetzt oeffnen?", _
-                          vbCritical + vbYesNo, "LLM MultiChat - Fehler")
-        
-        If Response = vbYes Then
-            WshShell.Run "notepad """ & LogFile & """", 1, False
-        End If
-        
+        MsgBox "Installation fehlgeschlagen!" & vbCrLf & vbCrLf & _
+               "Bitte manuell versuchen: npm install", vbCritical, "LLM MultiChat - Fehler"
         WScript.Quit 1
-    Else
-        ' Bei Erfolg Log-Datei loeschen
-        On Error Resume Next
-        FSO.DeleteFile LogFile
-        On Error GoTo 0
     End If
 End Sub
 
@@ -181,6 +205,16 @@ End Sub
 
 Sub Main()
     Dim NeedNodeJS, NeedModules
+    
+    ' 0. Disclaimer pruefen (nur beim ersten Start)
+    If Not HasAcceptedDisclaimer() Then
+        If Not ShowDisclaimer() Then
+            MsgBox "Setup abgebrochen." & vbCrLf & vbCrLf & _
+                   "Sie haben die Nutzungsbedingungen nicht akzeptiert.", _
+                   vbInformation, "LLM MultiChat"
+            WScript.Quit 0
+        End If
+    End If
     
     ' 1. Status-Fenster starten
     StartStatusWindow
