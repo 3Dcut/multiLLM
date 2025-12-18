@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>LLM MultiChat - Nutzungsbedingungen</title>
     <HTA:APPLICATION
         ID="DisclaimerWindow"
@@ -21,78 +22,85 @@
             background: #f5f5f5;
             color: #333;
             margin: 0;
-            padding: 20px;
+            padding: 25px;
             font-size: 13px;
         }
         h1 {
-            margin: 0 0 15px 0;
-            font-size: 18px;
+            margin: 0 0 20px 0;
+            font-size: 20px;
             color: #1a1a2e;
             border-bottom: 2px solid #6366f1;
-            padding-bottom: 10px;
+            padding-bottom: 12px;
         }
         .warning-box {
             background: #fff3cd;
             border: 1px solid #ffc107;
             border-left: 4px solid #ffc107;
             padding: 15px;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             border-radius: 4px;
         }
         .warning-box h2 {
             margin: 0 0 10px 0;
-            font-size: 14px;
+            font-size: 15px;
             color: #856404;
         }
         .content {
             background: white;
             border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
             border-radius: 4px;
-            max-height: 180px;
+            height: 280px;
             overflow-y: auto;
+        }
+        .content ul {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        .content li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        .lesetest {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 12px;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-size: 13px;
         }
         .checkbox-container {
             background: #e8f4fd;
             border: 1px solid #bee5eb;
-            padding: 12px;
-            margin-bottom: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
             border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
         .checkbox-container input {
             width: 18px;
             height: 18px;
             cursor: pointer;
+            vertical-align: middle;
+            margin-right: 10px;
         }
         .checkbox-container label {
             cursor: pointer;
             font-weight: 500;
-        }
-        .hint {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-            padding: 10px;
-            margin-bottom: 15px;
-            border-radius: 4px;
-            font-size: 12px;
+            vertical-align: middle;
         }
         .buttons {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 10px;
         }
         .btn {
-            padding: 10px 25px;
+            padding: 12px 30px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 500;
         }
         .btn-security {
@@ -105,6 +113,7 @@
         .btn-ok {
             background: #dc3545;
             color: white;
+            margin-right: 10px;
         }
         .btn-ok:hover {
             background: #c82333;
@@ -116,20 +125,16 @@
         .btn-cancel:hover {
             background: #218838;
         }
-        .btn:disabled {
+        .btn-disabled {
             background: #ccc;
             cursor: not-allowed;
-        }
-        .right-buttons {
-            display: flex;
-            gap: 10px;
         }
     </style>
     <script>
         var fso, shell, appPath, resultFile;
         
-        window.resizeTo(580, 620);
-        window.moveTo((screen.width - 580) / 2, (screen.height - 620) / 2);
+        window.resizeTo(650, 700);
+        window.moveTo((screen.width - 650) / 2, (screen.height - 700) / 2);
         
         try {
             fso = new ActiveXObject("Scripting.FileSystemObject");
@@ -148,7 +153,14 @@
         
         function updateButtons() {
             var checked = document.getElementById('acceptCheckbox').checked;
-            document.getElementById('btnCancel').disabled = !checked;
+            var btn = document.getElementById('btnCancel');
+            if (checked) {
+                btn.disabled = false;
+                btn.className = 'btn btn-cancel';
+            } else {
+                btn.disabled = true;
+                btn.className = 'btn btn-disabled';
+            }
         }
         
         function openSecurityReport() {
@@ -208,6 +220,12 @@
             <li>Sensible Daten sollten <strong>nicht</strong> ueber diese Anwendung verarbeitet werden</li>
         </ul>
         <p><strong>Empfehlung:</strong> Lesen Sie den Security-Report, bevor Sie fortfahren.</p>
+        
+        <div class="lesetest">
+            <strong>LESETEST:</strong> Wenn Sie die Bedingungen akzeptieren moechten, 
+            druecken Sie <strong>"Abbrechen"</strong> um fortzufahren. 
+            Die Schaltflaeche "OK" bricht die Installation ab.
+        </div>
     </div>
     
     <div class="checkbox-container">
@@ -215,16 +233,11 @@
         <label for="acceptCheckbox">Ich habe die Hinweise gelesen und akzeptiere die Nutzung auf eigene Verantwortung</label>
     </div>
     
-    <div class="hint">
-        <strong>Lesetest:</strong> Wenn Sie die Bedingungen akzeptieren moechten, 
-        druecken Sie <strong>"Abbrechen"</strong> um fortzufahren.
-    </div>
-    
     <div class="buttons">
         <button class="btn btn-security" onclick="openSecurityReport()">Security-Report</button>
-        <div class="right-buttons">
+        <div>
             <button class="btn btn-ok" onclick="doOK()">OK</button>
-            <button class="btn btn-cancel" id="btnCancel" onclick="doCancel()" disabled>Abbrechen</button>
+            <button class="btn btn-disabled" id="btnCancel" onclick="doCancel()" disabled>Abbrechen</button>
         </div>
     </div>
 </body>
