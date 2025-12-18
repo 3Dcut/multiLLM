@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LLM MultiChat</title>
+    <HTA:APPLICATION
+        ID="StatusWindow"
+        APPLICATIONNAME="LLM MultiChat Status"
+        BORDER="thin"
+        BORDERSTYLE="normal"
+        CAPTION="yes"
+        SHOWINTASKBAR="yes"
+        SINGLEINSTANCE="yes"
+        SYSMENU="no"
+        WINDOWSTATE="normal"
+        SCROLL="no"
+    />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            margin: 0;
+            padding: 30px;
+            text-align: center;
+        }
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 22px;
+            font-weight: 300;
+        }
+        .version {
+            color: #8a8aaa;
+            font-size: 11px;
+            margin-bottom: 25px;
+        }
+        #status {
+            font-size: 13px;
+            color: #a0a0c0;
+            margin-bottom: 15px;
+            min-height: 18px;
+        }
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid #3a3a5a;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            margin: 0 auto;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        var fso, statusFile, shell;
+        
+        window.resizeTo(320, 180);
+        window.moveTo((screen.width - 320) / 2, (screen.height - 180) / 2);
+        
+        try {
+            fso = new ActiveXObject("Scripting.FileSystemObject");
+            shell = new ActiveXObject("WScript.Shell");
+            statusFile = shell.ExpandEnvironmentStrings("%TEMP%") + "\\llm-multichat-status.txt";
+        } catch(e) {}
+        
+        function checkStatus() {
+            try {
+                if (fso.FileExists(statusFile)) {
+                    var file = fso.OpenTextFile(statusFile, 1);
+                    var content = file.ReadAll();
+                    file.Close();
+                    
+                    var lines = content.split("\n");
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i].replace(/\r/g, "");
+                        if (line.indexOf("VERSION:") === 0) {
+                            document.getElementById("version").innerText = "Version " + line.substring(8);
+                        } else if (line.indexOf("STATUS:") === 0) {
+                            document.getElementById("status").innerText = line.substring(7);
+                        } else if (line === "CLOSE") {
+                            window.close();
+                            return;
+                        }
+                    }
+                }
+            } catch(e) {}
+            
+            setTimeout(checkStatus, 300);
+        }
+        
+        window.onload = function() {
+            checkStatus();
+        };
+    </script>
+</head>
+<body>
+    <h1>LLM MultiChat</h1>
+    <div class="version" id="version">Version ...</div>
+    <div id="status">Initialisiere...</div>
+    <div class="spinner"></div>
+</body>
+</html>

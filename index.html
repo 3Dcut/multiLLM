@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';">
+  <title>LLM MultiChat</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Steuerungsleiste -->
+  <div id="control-bar">
+    <div id="input-container">
+      <textarea id="prompt-input" placeholder="Prompt eingeben... (Strg+Enter zum Senden)" rows="2"></textarea>
+      <div id="input-buttons">
+        <button id="paste-image-button" title="Bild aus Zwischenablage einfügen (Strg+Shift+V)">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+          </svg>
+        </button>
+        <button id="send-button" title="Senden (Strg+Enter)">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="toolbar">
+      <!-- LINKS: Modelle + Layout -->
+      <div id="toolbar-left">
+        <div id="status-bar">
+          <!-- Wird dynamisch generiert -->
+        </div>
+        <div id="layout-buttons">
+          <button class="layout-btn active" data-layout="grid" title="Raster">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="horizontal" title="Horizontal">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 3h4v18H3V3zm7 0h4v18h-4V3zm7 0h4v18h-4V3z"/></svg>
+          </button>
+          <button class="layout-btn" data-layout="vertical" title="Vertikal">
+            <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 3h18v4H3V3zm0 7h18v4H3v-4zm0 7h18v4H3v-4z"/></svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- MITTE: Voting -->
+      <div id="toolbar-center">
+        <button id="vote-check-btn" title="Ja/Nein Abstimmung auswerten">🗳️ Vote</button>
+        <div id="vote-display">
+          <!-- Ja/Nein Abstimmung -->
+        </div>
+        <button id="compare-all-btn" title="Alle KIs vergleichen lassen">⚖️ Vergleichen</button>
+      </div>
+      
+      <!-- RECHTS: Neue Sitzung -->
+      <div id="toolbar-right">
+        <button id="refresh-all" title="Neue Sitzung starten">🔄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebView Container - wird dynamisch befüllt -->
+  <div id="webview-grid">
+    <div id="loading-message">Lade Konfiguration...</div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
