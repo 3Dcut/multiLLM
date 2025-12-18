@@ -1,16 +1,18 @@
 ' LLM MultiChat - Update Script
-' Prueft auf Updates von GitHub und laedt neue Dateien
+' Prueft auf Updates von GitHub via Commit-Timestamp
 
 Option Explicit
 
-Dim WshShell, FSO, AppPath, LocalVersion, RemoteVersion, Http
+Dim WshShell, FSO, AppPath, LocalTimestamp, RemoteTimestamp, RemoteCommit, Http
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 
 ' === KONFIGURATION ===
-' GitHub Raw URL (main branch)
+' GitHub API fuer letzten Commit
+Const GITHUB_API = "https://api.github.com/repos/3Dcut/multiLLM/commits/main"
+' GitHub Raw URL fuer Dateien
 Const GITHUB_RAW = "https://raw.githubusercontent.com/3Dcut/multiLLM/main"
-' Fallback: Netzlaufwerk (fuer Offline/Firmen-Umgebung)
+' Fallback: Netzlaufwerk
 Const FALLBACK_SOURCE = "\\acv27.acadon.acadon.de\Ablage\jmi\llm-multichat"
 ' ======================
 
@@ -22,6 +24,7 @@ Function DownloadString(url)
     On Error Resume Next
     Set Http = CreateObject("MSXML2.XMLHTTP")
     Http.Open "GET", url, False
+    Http.setRequestHeader "User-Agent", "LLM-MultiChat-Updater"
     Http.Send
     If Http.Status = 200 Then
         DownloadString = Http.ResponseText
@@ -37,6 +40,7 @@ Function DownloadFile(url, destPath)
     Dim Stream
     Set Http = CreateObject("MSXML2.XMLHTTP")
     Http.Open "GET", url, False
+    Http.setRequestHeader "User-Agent", "LLM-MultiChat-Updater"
     Http.Send
     
     If Http.Status = 200 Then
@@ -55,44 +59,67 @@ Function DownloadFile(url, destPath)
     On Error GoTo 0
 End Function
 
+' --- JSON Parsing (einfach, fuer Commit-Info) ---
+
+Function ExtractJsonValue(json, key)
+    ' Extrahiert Wert fuer "key": "value" oder "key": value
+    Dim regex, matches
+    Set regex = New RegExp
+    regex.Pattern = """" & key & """\s*:\s*""([^""]+)"""
+    regex.IgnoreCase = True
+    regex.Global = False
+    
+    Set matches = regex.Execute(json)
+    If matches.Count > 0 Then
+        ExtractJsonValue = matches(0).SubMatches(0)
+    Else
+        ExtractJsonValue = ""
+    End If
+End Function
+
 ' --- Versions-Hilfsfunktionen ---
 
-Function ReadLocalVersion()
+Function ReadLocalInfo()
+    ' Liest lokale update-info.txt (Commit-SHA und Timestamp)
     On Error Resume Next
-    Dim versionPath, file
-    versionPath = AppPath & "\version.txt"
-    If FSO.FileExists(versionPath) Then
-        Set file = FSO.OpenTextFile(versionPath, 1)
-        ReadLocalVersion = Trim(file.ReadLine())
+    Dim infoPath, file, line
+    infoPath = AppPath & "\update-info.txt"
+    
+    LocalTimestamp = ""
+    
+    If FSO.FileExists(infoPath) Then
+        Set file = FSO.OpenTextFile(infoPath, 1)
+        Do While Not file.AtEndOfStream
+            line = file.ReadLine()
+            If Left(line, 10) = "TIMESTAMP:" Then
+                LocalTimestamp = Trim(Mid(line, 11))
+            End If
+        Loop
         file.Close
-    Else
-        ReadLocalVersion = "0"
     End If
     On Error GoTo 0
 End Function
 
-Function CompareVersions(v1, v2)
-    ' Vergleicht Datums-Versionen (YYYY.MM.DD.N) oder numerisch
-    ' Gibt 1 zurueck wenn v1 > v2, -1 wenn v1 < v2, 0 wenn gleich
-    Dim clean1, clean2
-    clean1 = Replace(v1, ".", "")
-    clean2 = Replace(v2, ".", "")
-    
-    ' Auf gleiche Laenge bringen
-    Do While Len(clean1) < Len(clean2)
-        clean1 = clean1 & "0"
-    Loop
-    Do While Len(clean2) < Len(clean1)
-        clean2 = clean2 & "0"
-    Loop
-    
-    If clean1 > clean2 Then
-        CompareVersions = 1
-    ElseIf clean1 < clean2 Then
-        CompareVersions = -1
+Sub SaveLocalInfo(timestamp, commitSha)
+    Dim file, infoPath
+    infoPath = AppPath & "\update-info.txt"
+    Set file = FSO.CreateTextFile(infoPath, True)
+    file.WriteLine "TIMESTAMP:" & timestamp
+    file.WriteLine "COMMIT:" & commitSha
+    file.Close
+End Sub
+
+Function FormatTimestamp(isoDate)
+    ' Konvertiert "2025-12-18T16:30:00Z" zu "18.12.2025 16:30"
+    On Error Resume Next
+    Dim parts, datePart, timePart
+    If Len(isoDate) >= 16 Then
+        FormatTimestamp = Mid(isoDate, 9, 2) & "." & Mid(isoDate, 6, 2) & "." & _
+                          Left(isoDate, 4) & " " & Mid(isoDate, 12, 5)
     Else
-        CompareVersions = 0
+        FormatTimestamp = isoDate
     End If
+    On Error GoTo 0
 End Function
 
 ' --- Status-Kommunikation ---
@@ -101,17 +128,39 @@ Sub WriteStatus(msg)
     Dim file, StatusFile
     StatusFile = WshShell.ExpandEnvironmentStrings("%TEMP%") & "\llm-multichat-status.txt"
     Set file = FSO.CreateTextFile(StatusFile, True)
-    file.WriteLine "VERSION:" & LocalVersion
+    file.WriteLine "VERSION:" & FormatTimestamp(LocalTimestamp)
     file.WriteLine "STATUS:" & msg
     file.Close
 End Sub
 
 ' --- Update-Funktionen ---
 
-Function CheckGitHubConnection()
-    Dim testContent
-    testContent = DownloadString(GITHUB_RAW & "/version.txt")
-    CheckGitHubConnection = (Len(testContent) > 0)
+Function GetGitHubCommitInfo()
+    ' Holt letzten Commit von GitHub API
+    Dim json
+    json = DownloadString(GITHUB_API)
+    
+    If Len(json) > 0 Then
+        RemoteCommit = ExtractJsonValue(json, "sha")
+        ' Datum aus commit.author.date extrahieren
+        Dim dateMatch
+        Set dateMatch = New RegExp
+        dateMatch.Pattern = """date""\s*:\s*""(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?)"""
+        dateMatch.Global = True
+        Dim matches
+        Set matches = dateMatch.Execute(json)
+        If matches.Count > 0 Then
+            ' Zweites Datum ist author.date (erstes ist committer.date)
+            If matches.Count > 1 Then
+                RemoteTimestamp = matches(1).SubMatches(0)
+            Else
+                RemoteTimestamp = matches(0).SubMatches(0)
+            End If
+        End If
+        GetGitHubCommitInfo = True
+    Else
+        GetGitHubCommitInfo = False
+    End If
 End Function
 
 Function CheckFallbackConnection()
@@ -129,7 +178,6 @@ Sub DownloadAllFiles(useGitHub)
         "styles.css", _
         "package.json", _
         "README.md", _
-        "version.txt", _
         "status.hta", _
         "update.vbs", _
         "Start.vbs", _
@@ -144,7 +192,6 @@ Sub DownloadAllFiles(useGitHub)
             sourceUrl = GITHUB_RAW & "/" & file
             DownloadFile sourceUrl, destPath
         Else
-            ' Fallback: Netzlaufwerk
             On Error Resume Next
             If FSO.FileExists(FALLBACK_SOURCE & "\" & file) Then
                 FSO.CopyFile FALLBACK_SOURCE & "\" & file, destPath, True
@@ -171,22 +218,20 @@ End Sub
 ' --- Hauptprogramm ---
 
 Sub Main()
-    Dim isFirstInstall, response, useGitHub, canConnect
+    Dim isFirstInstall, response, useGitHub
     
-    LocalVersion = ReadLocalVersion()
+    ' Lokale Info lesen
+    ReadLocalInfo
     
-    ' Verbindung pruefen (GitHub bevorzugt)
-    WriteStatus "Pruefe Verbindung..."
-    useGitHub = CheckGitHubConnection()
+    ' GitHub API pruefen
+    WriteStatus "Pruefe GitHub..."
+    useGitHub = GetGitHubCommitInfo()
     
     If Not useGitHub Then
         ' Fallback auf Netzlaufwerk
         If Not CheckFallbackConnection() Then
-            ' Keine Verbindung - nur bei Erstinstallation Fehler
             If Not FSO.FileExists(AppPath & "\main.js") Then
                 MsgBox "Keine Verbindung zu Update-Server!" & vbCrLf & vbCrLf & _
-                       "GitHub: " & GITHUB_RAW & vbCrLf & _
-                       "Fallback: " & FALLBACK_SOURCE & vbCrLf & vbCrLf & _
                        "Bitte Internetverbindung pruefen.", vbCritical, "LLM MultiChat"
                 WScript.Quit 1
             End If
@@ -194,51 +239,41 @@ Sub Main()
         End If
     End If
     
-    ' Remote-Version holen
-    If useGitHub Then
-        RemoteVersion = Trim(DownloadString(GITHUB_RAW & "/version.txt"))
-    Else
-        On Error Resume Next
-        Dim file
-        Set file = FSO.OpenTextFile(FALLBACK_SOURCE & "\version.txt", 1)
-        RemoteVersion = Trim(file.ReadLine())
-        file.Close
-        On Error GoTo 0
-    End If
-    
     ' Erstinstallation?
     isFirstInstall = Not FSO.FileExists(AppPath & "\main.js")
     
     If isFirstInstall Then
-        WriteStatus "Erstinstallation von " & IIf(useGitHub, "GitHub", "Netzwerk") & "..."
+        WriteStatus "Erstinstallation..."
         DownloadAllFiles useGitHub
         InitializeConfigs
-        LocalVersion = RemoteVersion
+        If useGitHub Then
+            SaveLocalInfo RemoteTimestamp, RemoteCommit
+        End If
         Exit Sub
     End If
     
-    ' Update verfuegbar?
-    If CompareVersions(RemoteVersion, LocalVersion) > 0 Then
+    ' Update verfuegbar? (Timestamp vergleichen)
+    If useGitHub And RemoteTimestamp > LocalTimestamp Then
         response = MsgBox("Update verfuegbar!" & vbCrLf & vbCrLf & _
-                          "Neu: " & RemoteVersion & vbCrLf & _
-                          "Aktuell: " & LocalVersion & vbCrLf & vbCrLf & _
-                          "Quelle: " & IIf(useGitHub, "GitHub", "Netzwerk") & vbCrLf & vbCrLf & _
+                          "Neu: " & FormatTimestamp(RemoteTimestamp) & vbCrLf & _
+                          "Aktuell: " & FormatTimestamp(LocalTimestamp) & vbCrLf & vbCrLf & _
                           "Jetzt aktualisieren?", _
                           vbYesNo + vbQuestion, "LLM MultiChat Update")
         
         If response = vbYes Then
-            WriteStatus "Update " & RemoteVersion & " wird installiert..."
+            WriteStatus "Update wird installiert..."
             DownloadAllFiles useGitHub
+            SaveLocalInfo RemoteTimestamp, RemoteCommit
             
-            MsgBox "Update auf Version " & RemoteVersion & " abgeschlossen!" & vbCrLf & vbCrLf & _
+            MsgBox "Update abgeschlossen!" & vbCrLf & vbCrLf & _
+                   "Stand: " & FormatTimestamp(RemoteTimestamp) & vbCrLf & vbCrLf & _
                    "Deine Einstellungen wurden beibehalten.", _
                    vbInformation, "LLM MultiChat"
             
-            ' node_modules aktualisieren?
             If FSO.FolderExists(AppPath & "\node_modules") Then
-                response = MsgBox("Sollen die Node-Module aktualisiert werden?" & vbCrLf & _
+                response = MsgBox("Node-Module aktualisieren?" & vbCrLf & _
                                   "(Empfohlen nach groesseren Updates)", _
-                                  vbYesNo + vbQuestion, "LLM MultiChat Update")
+                                  vbYesNo + vbQuestion, "LLM MultiChat")
                 If response = vbYes Then
                     On Error Resume Next
                     FSO.DeleteFolder AppPath & "\node_modules", True
@@ -248,17 +283,7 @@ Sub Main()
         End If
     End If
     
-    ' Configs initialisieren
     InitializeConfigs
 End Sub
-
-' IIf Ersatz fuer VBScript
-Function IIf(condition, trueVal, falseVal)
-    If condition Then
-        IIf = trueVal
-    Else
-        IIf = falseVal
-    End If
-End Function
 
 Main
