@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>LLM MultiChat - Deinstallation</title>
     <HTA:APPLICATION
         ID="UninstallWindow"
@@ -125,8 +126,8 @@
     <script>
         var fso, shell, appPath;
         
-        window.resizeTo(500, 480);
-        window.moveTo((screen.width - 500) / 2, (screen.height - 480) / 2);
+        window.resizeTo(500, 520);
+        window.moveTo((screen.width - 500) / 2, (screen.height - 520) / 2);
         
         try {
             fso = new ActiveXObject("Scripting.FileSystemObject");
@@ -190,26 +191,23 @@
         function doUninstall() {
             var option = getSelectedOption();
             if (!option) {
-                alert("Bitte eine Option auswählen.");
+                alert("Bitte eine Option auswaehlen.");
                 return;
             }
             
             var confirmMsg = "";
             switch(option) {
                 case "userdata":
-                    confirmMsg = "Nutzerdaten und App-Dateien werden gelöscht.\nSetup-Dateien bleiben erhalten.";
+                    confirmMsg = "Nutzerdaten und App-Dateien werden geloescht.\nSetup-Dateien bleiben erhalten.";
                     break;
                 case "deps":
-                    confirmMsg = "Node-Module (node_modules) werden gelöscht.\nBei Neustart werden sie erneut heruntergeladen.";
-                    break;
-                case "npm":
-                    confirmMsg = "npm wird deinstalliert.\nNode.js bleibt installiert.";
+                    confirmMsg = "Node-Module (node_modules) werden geloescht.\nBei Neustart werden sie erneut heruntergeladen.";
                     break;
                 case "nodejs":
                     confirmMsg = "Node.js wird komplett deinstalliert.\nnpm wird ebenfalls entfernt.";
                     break;
                 case "complete":
-                    confirmMsg = "ALLES wird gelöscht:\n- Alle App-Dateien\n- node_modules\n- Node.js\n\nDieser Vorgang kann nicht rückgängig gemacht werden!";
+                    confirmMsg = "ALLES wird geloescht:\n- Alle App-Dateien\n- node_modules\n- Node.js\n\nDieser Vorgang kann nicht rueckgaengig gemacht werden!";
                     break;
             }
             
@@ -225,9 +223,6 @@
                 case "deps":
                     uninstallDeps();
                     break;
-                case "npm":
-                    uninstallNpm();
-                    break;
                 case "nodejs":
                     uninstallNodejs();
                     break;
@@ -238,12 +233,10 @@
         }
         
         function uninstallUserdata() {
-            showStatus("Lösche Nutzerdaten...");
+            showStatus("Loesche Nutzerdaten...");
             
-            // Setup-Dateien die bleiben sollen
             var keepFiles = ["Start.vbs", "update.vbs", "status.hta", "disclaimer.hta", "Uninstall.hta"];
             
-            // Alle anderen Dateien löschen
             var folder = fso.GetFolder(appPath);
             var files = new Enumerator(folder.Files);
             for (; !files.atEnd(); files.moveNext()) {
@@ -260,10 +253,9 @@
                 }
             }
             
-            // node_modules löschen
             deleteFolder(appPath + "\\node_modules");
             
-            showStatus("Nutzerdaten gelöscht.");
+            showStatus("Nutzerdaten geloescht.");
             setTimeout(function() {
                 alert("Nutzerdaten wurden entfernt.\nSetup-Dateien bleiben erhalten.");
                 window.close();
@@ -271,43 +263,30 @@
         }
         
         function uninstallDeps() {
-            showStatus("Lösche node_modules...");
+            showStatus("Loesche node_modules...");
             deleteFolder(appPath + "\\node_modules");
-            showStatus("Dependencies gelöscht.");
+            showStatus("Dependencies geloescht.");
             setTimeout(function() {
-                alert("node_modules wurde gelöscht.\nBei Neustart werden Module erneut installiert.");
+                alert("node_modules wurde geloescht.\nBei Neustart werden Module erneut installiert.");
                 window.close();
             }, 500);
         }
         
-        function uninstallNpm() {
-            showStatus("Deinstalliere npm...");
-            // npm kann nicht einzeln deinstalliert werden, es ist Teil von Node.js
-            alert("npm ist Teil von Node.js und kann nicht separat deinstalliert werden.\n\nBitte 'Node.js entfernen' wählen.");
-            window.location.reload();
-        }
-        
         function uninstallNodejs() {
             showStatus("Deinstalliere Node.js...");
-            
-            // Node.js über Windows deinstallieren
-            shell.Run('msiexec /x {NODE_UNINSTALL_GUID} /passive', 1, false);
-            
-            // Alternative: Über Systemsteuerung
-            alert("Node.js Deinstallation wurde gestartet.\n\nFalls das nicht funktioniert:\nSystemsteuerung → Programme deinstallieren → Node.js");
+            shell.Run('powershell -Command "Get-WmiObject Win32_Product | Where-Object { $_.Name -like \'*Node*\' } | ForEach-Object { $_.Uninstall() }"', 1, false);
+            alert("Node.js Deinstallation wurde gestartet.\n\nFalls das nicht funktioniert:\nSystemsteuerung > Programme deinstallieren > Node.js");
             window.close();
         }
         
         function uninstallComplete() {
             showStatus("Komplette Deinstallation...");
             
-            // 1. Node.js deinstallieren
             showStatus("Deinstalliere Node.js...");
             try {
                 shell.Run('powershell -Command "Get-WmiObject Win32_Product | Where-Object { $_.Name -like \'*Node*\' } | ForEach-Object { $_.Uninstall() }"', 0, true);
             } catch(e) {}
             
-            // 2. Selbstlöschungs-Batch erstellen
             showStatus("Erstelle Cleanup-Script...");
             var batchPath = shell.ExpandEnvironmentStrings("%TEMP%") + "\\llm-multichat-cleanup.bat";
             var batch = fso.CreateTextFile(batchPath, true);
@@ -317,10 +296,9 @@
             batch.WriteLine("del \"%~f0\"");
             batch.Close();
             
-            // 3. Batch starten und HTA schließen
             shell.Run('"' + batchPath + '"', 0, false);
             
-            alert("Deinstallation abgeschlossen.\n\nDer Ordner wird in wenigen Sekunden gelöscht.");
+            alert("Deinstallation abgeschlossen.\n\nDer Ordner wird in wenigen Sekunden geloescht.");
             window.close();
         }
         
@@ -330,19 +308,19 @@
     </script>
 </head>
 <body>
-    <h1>🗑️ LLM MultiChat - Deinstallation</h1>
+    <h1>LLM MultiChat - Deinstallation</h1>
     
     <div id="optionsContainer">
         <div class="option" onclick="document.getElementById('opt1').checked=true; updateSelection();">
             <input type="radio" name="uninstallOption" id="opt1" value="userdata" onclick="updateSelection()">
             <label for="opt1">Nutzerdaten entfernen</label>
-            <div class="desc">Löscht alle Dateien außer Setup-Skripten (Start.vbs, update.vbs, etc.)</div>
+            <div class="desc">Loescht alle Dateien ausser Setup-Skripten (Start.vbs, update.vbs, etc.)</div>
         </div>
         
         <div class="option" onclick="document.getElementById('opt2').checked=true; updateSelection();">
             <input type="radio" name="uninstallOption" id="opt2" value="deps" onclick="updateSelection()">
             <label for="opt2">Dependencies entfernen</label>
-            <div class="desc">Löscht nur node_modules (~150 MB). Werden bei Neustart erneut heruntergeladen.</div>
+            <div class="desc">Loescht nur node_modules (~150 MB). Werden bei Neustart erneut heruntergeladen.</div>
         </div>
         
         <div class="option" onclick="document.getElementById('opt3').checked=true; updateSelection();">
@@ -358,7 +336,7 @@
         </div>
         
         <div class="warning">
-            ⚠️ <strong>Achtung:</strong> Gelöschte Daten können nicht wiederhergestellt werden!
+            <strong>Achtung:</strong> Geloeschte Daten koennen nicht wiederhergestellt werden!
         </div>
     </div>
     

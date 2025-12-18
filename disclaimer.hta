@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>LLM MultiChat - Nutzungsbedingungen</title>
     <HTA:APPLICATION
         ID="DisclaimerWindow"
@@ -49,7 +50,7 @@
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 4px;
-            max-height: 200px;
+            max-height: 180px;
             overflow-y: auto;
         }
         .checkbox-container {
@@ -127,14 +128,13 @@
     <script>
         var fso, shell, appPath, resultFile;
         
-        window.resizeTo(550, 520);
-        window.moveTo((screen.width - 550) / 2, (screen.height - 520) / 2);
+        window.resizeTo(580, 620);
+        window.moveTo((screen.width - 580) / 2, (screen.height - 620) / 2);
         
         try {
             fso = new ActiveXObject("Scripting.FileSystemObject");
             shell = new ActiveXObject("WScript.Shell");
             
-            // Pfad ermitteln
             var fullPath = window.location.pathname;
             if (fullPath.charAt(0) === '/') fullPath = fullPath.substring(1);
             fullPath = fullPath.replace(/\//g, '\\');
@@ -165,7 +165,6 @@
         }
         
         function doCancel() {
-            // "Abbrechen" = Akzeptieren (Lesetest bestanden!)
             try {
                 var file = fso.CreateTextFile(resultFile, true);
                 file.WriteLine("ACCEPTED");
@@ -175,7 +174,6 @@
         }
         
         function doOK() {
-            // "OK" = Ablehnen (Lesetest nicht bestanden)
             try {
                 var file = fso.CreateTextFile(resultFile, true);
                 file.WriteLine("DECLINED");
@@ -190,7 +188,7 @@
     </script>
 </head>
 <body>
-    <h1>⚠️ LLM MultiChat - Nutzungsbedingungen</h1>
+    <h1>LLM MultiChat - Nutzungsbedingungen</h1>
     
     <div class="warning-box">
         <h2>WICHTIGER HINWEIS</h2>
@@ -218,12 +216,12 @@
     </div>
     
     <div class="hint">
-        <strong>📖 Lesetest:</strong> Wenn Sie die Bedingungen akzeptieren moechten, 
+        <strong>Lesetest:</strong> Wenn Sie die Bedingungen akzeptieren moechten, 
         druecken Sie <strong>"Abbrechen"</strong> um fortzufahren.
     </div>
     
     <div class="buttons">
-        <button class="btn btn-security" onclick="openSecurityReport()">📄 Security-Report</button>
+        <button class="btn btn-security" onclick="openSecurityReport()">Security-Report</button>
         <div class="right-buttons">
             <button class="btn btn-ok" onclick="doOK()">OK</button>
             <button class="btn btn-cancel" id="btnCancel" onclick="doCancel()" disabled>Abbrechen</button>

@@ -12,8 +12,6 @@ Set FSO = CreateObject("Scripting.FileSystemObject")
 Const GITHUB_API = "https://api.github.com/repos/3Dcut/multiLLM/commits/main"
 ' GitHub Raw URL fuer Dateien
 Const GITHUB_RAW = "https://raw.githubusercontent.com/3Dcut/multiLLM/main"
-' Fallback: Netzlaufwerk
-Const FALLBACK_SOURCE = "\\acv27.acadon.acadon.de\Ablage\jmi\llm-multichat"
 ' ======================
 
 AppPath = FSO.GetParentFolderName(WScript.ScriptFullName)
@@ -62,7 +60,6 @@ End Function
 ' --- JSON Parsing (einfach, fuer Commit-Info) ---
 
 Function ExtractJsonValue(json, key)
-    ' Extrahiert Wert fuer "key": "value" oder "key": value
     Dim regex, matches
     Set regex = New RegExp
     regex.Pattern = """" & key & """\s*:\s*""([^""]+)"""
@@ -80,7 +77,6 @@ End Function
 ' --- Versions-Hilfsfunktionen ---
 
 Function ReadLocalInfo()
-    ' Liest lokale update-info.txt (Commit-SHA und Timestamp)
     On Error Resume Next
     Dim infoPath, file, line
     infoPath = AppPath & "\update-info.txt"
@@ -110,9 +106,7 @@ Sub SaveLocalInfo(timestamp, commitSha)
 End Sub
 
 Function FormatTimestamp(isoDate)
-    ' Konvertiert "2025-12-18T16:30:00Z" zu "18.12.2025 16:30"
     On Error Resume Next
-    Dim parts, datePart, timePart
     If Len(isoDate) >= 16 Then
         FormatTimestamp = Mid(isoDate, 9, 2) & "." & Mid(isoDate, 6, 2) & "." & _
                           Left(isoDate, 4) & " " & Mid(isoDate, 12, 5)
@@ -136,13 +130,11 @@ End Sub
 ' --- Update-Funktionen ---
 
 Function GetGitHubCommitInfo()
-    ' Holt letzten Commit von GitHub API
     Dim json
     json = DownloadString(GITHUB_API)
     
     If Len(json) > 0 Then
         RemoteCommit = ExtractJsonValue(json, "sha")
-        ' Datum aus commit.author.date extrahieren
         Dim dateMatch
         Set dateMatch = New RegExp
         dateMatch.Pattern = """date""\s*:\s*""(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?)"""
@@ -150,7 +142,6 @@ Function GetGitHubCommitInfo()
         Dim matches
         Set matches = dateMatch.Execute(json)
         If matches.Count > 0 Then
-            ' Zweites Datum ist author.date (erstes ist committer.date)
             If matches.Count > 1 Then
                 RemoteTimestamp = matches(1).SubMatches(0)
             Else
@@ -163,11 +154,7 @@ Function GetGitHubCommitInfo()
     End If
 End Function
 
-Function CheckFallbackConnection()
-    CheckFallbackConnection = FSO.FolderExists(FALLBACK_SOURCE)
-End Function
-
-Sub DownloadAllFiles(useGitHub)
+Sub DownloadAllFiles()
     Dim filesToDownload, file, sourceUrl, destPath
     
     filesToDownload = Array( _
@@ -179,6 +166,8 @@ Sub DownloadAllFiles(useGitHub)
         "package.json", _
         "README.md", _
         "status.hta", _
+        "disclaimer.hta", _
+        "Uninstall.hta", _
         "update.vbs", _
         "Start.vbs", _
         "config.json.template", _
@@ -187,17 +176,8 @@ Sub DownloadAllFiles(useGitHub)
     
     For Each file In filesToDownload
         destPath = AppPath & "\" & file
-        
-        If useGitHub Then
-            sourceUrl = GITHUB_RAW & "/" & file
-            DownloadFile sourceUrl, destPath
-        Else
-            On Error Resume Next
-            If FSO.FileExists(FALLBACK_SOURCE & "\" & file) Then
-                FSO.CopyFile FALLBACK_SOURCE & "\" & file, destPath, True
-            End If
-            On Error GoTo 0
-        End If
+        sourceUrl = GITHUB_RAW & "/" & file
+        DownloadFile sourceUrl, destPath
     Next
 End Sub
 
@@ -218,42 +198,38 @@ End Sub
 ' --- Hauptprogramm ---
 
 Sub Main()
-    Dim isFirstInstall, response, useGitHub
+    Dim isFirstInstall, response, canConnect
     
     ' Lokale Info lesen
     ReadLocalInfo
     
     ' GitHub API pruefen
     WriteStatus "Pruefe GitHub..."
-    useGitHub = GetGitHubCommitInfo()
+    canConnect = GetGitHubCommitInfo()
     
-    If Not useGitHub Then
-        ' Fallback auf Netzlaufwerk
-        If Not CheckFallbackConnection() Then
-            If Not FSO.FileExists(AppPath & "\main.js") Then
-                MsgBox "Keine Verbindung zu Update-Server!" & vbCrLf & vbCrLf & _
-                       "Bitte Internetverbindung pruefen.", vbCritical, "LLM MultiChat"
-                WScript.Quit 1
-            End If
-            Exit Sub
+    If Not canConnect Then
+        ' Keine Verbindung - nur bei Erstinstallation Fehler
+        If Not FSO.FileExists(AppPath & "\main.js") Then
+            MsgBox "Keine Verbindung zu GitHub!" & vbCrLf & vbCrLf & _
+                   "Bitte Internetverbindung pruefen.", vbCritical, "LLM MultiChat"
+            WScript.Quit 1
         End If
+        Exit Sub
     End If
     
     ' Erstinstallation?
     isFirstInstall = Not FSO.FileExists(AppPath & "\main.js")
     
     If isFirstInstall Then
-        WriteStatus "Erstinstallation..."
-        DownloadAllFiles useGitHub
+        WriteStatus "Erstinstallation von GitHub..."
+        DownloadAllFiles
         InitializeConfigs
-        If useGitHub Then
-            SaveLocalInfo RemoteTimestamp, RemoteCommit
-        End If
+        SaveLocalInfo RemoteTimestamp, RemoteCommit
         Exit Sub
     End If
     
     ' Update verfuegbar? (Timestamp vergleichen)
-    If useGitHub And RemoteTimestamp > LocalTimestamp Then
+    If RemoteTimestamp > LocalTimestamp Then
         response = MsgBox("Update verfuegbar!" & vbCrLf & vbCrLf & _
                           "Neu: " & FormatTimestamp(RemoteTimestamp) & vbCrLf & _
                           "Aktuell: " & FormatTimestamp(LocalTimestamp) & vbCrLf & vbCrLf & _
@@ -262,7 +238,7 @@ Sub Main()
         
         If response = vbYes Then
             WriteStatus "Update wird installiert..."
-            DownloadAllFiles useGitHub
+            DownloadAllFiles
             SaveLocalInfo RemoteTimestamp, RemoteCommit
             
             MsgBox "Update abgeschlossen!" & vbCrLf & vbCrLf & _
