@@ -26,7 +26,7 @@
             font-size: 13px;
         }
         h1 {
-            margin: 0 0 20px 0;
+            margin: 0 0 25px 0;
             font-size: 20px;
             color: #dc3545;
             border-bottom: 2px solid #dc3545;
@@ -35,8 +35,8 @@
         .option {
             background: white;
             border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
             border-radius: 4px;
             cursor: pointer;
         }
@@ -49,28 +49,30 @@
         }
         .option input {
             margin-right: 12px;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             vertical-align: middle;
         }
         .option label {
             cursor: pointer;
             font-weight: 500;
+            font-size: 14px;
             vertical-align: middle;
         }
         .option-desc {
-            margin-left: 28px;
+            margin-left: 30px;
             font-size: 12px;
             color: #666;
-            margin-top: 8px;
+            margin-top: 10px;
+            line-height: 1.5;
         }
         .warning {
             background: #fff3cd;
             border: 1px solid #ffc107;
-            padding: 12px;
-            margin: 20px 0;
+            padding: 15px;
+            margin: 25px 0;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 13px;
         }
         .buttons {
             display: flex;
@@ -105,16 +107,17 @@
             display: none;
             background: #e8f4fd;
             border: 1px solid #bee5eb;
-            padding: 15px;
+            padding: 20px;
             border-radius: 4px;
             margin-top: 20px;
+            font-size: 14px;
         }
     </style>
     <script>
         var fso, shell, appPath;
         
-        window.resizeTo(550, 580);
-        window.moveTo((screen.width - 550) / 2, (screen.height - 580) / 2);
+        window.resizeTo(600, 700);
+        window.moveTo((screen.width - 600) / 2, (screen.height - 700) / 2);
         
         try {
             fso = new ActiveXObject("Scripting.FileSystemObject");
@@ -135,7 +138,6 @@
         }
         
         function updateSelection() {
-            // Alle Optionen zuruecksetzen
             var opt1 = document.getElementById('opt1Container');
             var opt2 = document.getElementById('opt2Container');
             var opt3 = document.getElementById('opt3Container');
@@ -146,13 +148,11 @@
             opt3.className = 'option';
             opt4.className = 'option';
             
-            // Ausgewaehlte Option hervorheben
             if (document.getElementById('opt1').checked) opt1.className = 'option option-selected';
             if (document.getElementById('opt2').checked) opt2.className = 'option option-selected';
             if (document.getElementById('opt3').checked) opt3.className = 'option option-selected';
             if (document.getElementById('opt4').checked) opt4.className = 'option option-selected';
             
-            // Button aktivieren
             var btn = document.getElementById('btnUninstall');
             btn.disabled = false;
             btn.className = 'btn btn-uninstall';
