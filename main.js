@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
+let currentLanguage = 'de'; // Aktuelle Sprache
+
+// Sprach-Mapping für Accept-Language Header
+const languageHeaders = {
+  de: 'de-DE,de;q=0.9,en;q=0.8',
+  en: 'en-US,en;q=0.9',
+  nl: 'nl-NL,nl;q=0.9,en;q=0.8'
+};
 
 // Pfade zu den Config-Dateien
 const configPath = path.join(__dirname, 'config.json');
@@ -20,10 +28,15 @@ function loadConfig() {
 
 function loadUserSettings() {
   try {
-    return JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+    const settings = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+    // Sprache aus Settings laden
+    if (settings.language) {
+      currentLanguage = settings.language;
+    }
+    return settings;
   } catch (e) {
     console.error('Error loading user-settings.json, using defaults:', e);
-    return { activeServices: [], layout: 'grid' };
+    return { activeServices: [], layout: 'grid', language: 'de' };
   }
 }
 
@@ -38,6 +51,9 @@ function saveUserSettings(settings) {
 }
 
 function createWindow() {
+  // Settings laden um Sprache zu initialisieren
+  loadUserSettings();
+  
   mainWindow = new BrowserWindow({
     width: 1920,
     height: 1080,
@@ -73,9 +89,10 @@ function createWindow() {
     callback({ responseHeaders });
   });
 
-  // User-Agent setzen
+  // User-Agent und Accept-Language setzen
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+    details.requestHeaders['Accept-Language'] = languageHeaders[currentLanguage] || languageHeaders['en'];
     callback({ requestHeaders: details.requestHeaders });
   });
 
@@ -143,6 +160,16 @@ ipcMain.handle('write-file', (event, filename, data) => {
     console.error('Error writing file:', filename, e);
     return false;
   }
+});
+
+// Sprache setzen
+ipcMain.handle('set-language', (event, lang) => {
+  if (languageHeaders[lang]) {
+    currentLanguage = lang;
+    console.log('Language changed to:', lang);
+    return true;
+  }
+  return false;
 });
 
 app.whenReady().then(createWindow);

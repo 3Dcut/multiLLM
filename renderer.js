@@ -35,6 +35,12 @@ async function init() {
     console.log('Config loaded:', config.services.length, 'services');
     console.log('User settings:', userSettings);
     
+    // Sprache initialisieren
+    if (userSettings.language && I18N.translations[userSettings.language]) {
+      I18N.setLanguage(userSettings.language);
+    }
+    console.log('Language:', I18N.currentLang);
+    
     // Histories laden
     await loadPromptHistory();
     await loadSessionHistory();
@@ -45,12 +51,15 @@ async function init() {
     applyLayout(userSettings.layout);
     setupEventListeners();
     
+    // UI-Texte aktualisieren
+    updateUILanguage();
+    
     // Session-Navigation Buttons aktualisieren
     updateSessionNavButtons();
     
   } catch (e) {
     console.error('Error initializing:', e);
-    webviewGrid.innerHTML = '<div id="loading-message">Fehler beim Laden der Konfiguration</div>';
+    webviewGrid.innerHTML = `<div id="loading-message">${I18N.t('statusError')}</div>`;
   }
 }
 
@@ -95,11 +104,11 @@ function buildWebViews() {
       <div class="webview-header" style="border-left: 3px solid ${service.color}">
         <span class="service-name">${service.name}</span>
         <div class="header-buttons">
-          <button class="mute-btn" data-service="${service.id}" title="Nächste Nachricht überspringen">🔔</button>
-          <button class="focus-btn" data-service="${service.id}" title="Nur dieses Fenster anzeigen">🔍</button>
-          <button class="copy-response-btn" data-service="${service.id}" title="Letzte Antwort kopieren">📋</button>
-          <button class="compare-btn" data-service="${service.id}" title="Andere Antworten hier vergleichen lassen">⚖️</button>
-          <button class="reload-btn" data-service="${service.id}" title="Neu laden">↻</button>
+          <button class="mute-btn" data-service="${service.id}" data-i18n-title="tooltipMute">🔔</button>
+          <button class="focus-btn" data-service="${service.id}" data-i18n-title="tooltipFocus">🔍</button>
+          <button class="copy-response-btn" data-service="${service.id}" data-i18n-title="tooltipCopy">📋</button>
+          <button class="compare-btn" data-service="${service.id}" data-i18n-title="tooltipCrossCompare">⚖️</button>
+          <button class="reload-btn" data-service="${service.id}" data-i18n-title="tooltipReload">↻</button>
         </div>
       </div>
       <webview 
@@ -338,7 +347,7 @@ async function sendToAll() {
   const activeNonMuted = userSettings.activeServices.filter(id => !mutedServices.has(id));
   
   if (activeNonMuted.length === 0) {
-    alert('Mindestens ein Service muss aktiviert sein (alle sind stummgeschaltet)!');
+    alert(I18N.t('msgNoActiveService'));
     return;
   }
   
@@ -539,20 +548,20 @@ function setupEventListeners() {
   document.getElementById('compare-all-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('compare-all-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Sammle...';
+    btn.textContent = I18N.t('btnCompareLoading');
     
     resetVotes(); // Vote zurücksetzen bei Vergleich
     await compareAll();
     
     btn.disabled = false;
-    btn.textContent = '⚖️ Vergleichen';
+    btn.textContent = I18N.t('btnCompare');
   });
   
   // Vote Check Button
   document.getElementById('vote-check-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('vote-check-btn');
     btn.disabled = true;
-    btn.textContent = '⏳ Prüfe...';
+    btn.textContent = I18N.t('btnVoteLoading');
     
     await updateVoteDisplay();
     
@@ -561,7 +570,7 @@ function setupEventListeners() {
     setTimeout(() => fadeOutOverlays(), 1000);
     
     btn.disabled = false;
-    btn.textContent = '🗳️ Vote';
+    btn.textContent = I18N.t('btnVote');
   });
   
   // Layout Buttons
@@ -571,12 +580,26 @@ function setupEventListeners() {
       saveSettings();
     });
   });
+  
+  // Language Button
+  document.getElementById('language-btn')?.addEventListener('click', () => {
+    const nextLang = I18N.getNextLanguage();
+    I18N.setLanguage(nextLang);
+    userSettings.language = nextLang;
+    saveSettings();
+    updateUILanguage();
+    
+    // Webviews mit neuer Sprache neu laden (optional, aber nett)
+    reloadWebviewsWithLanguage();
+    
+    console.log('Language changed to:', nextLang);
+  });
 }
 
 // Bild aus Zwischenablage in alle aktiven Services einfügen
 async function pasteImageToAll() {
   if (userSettings.activeServices.length === 0) {
-    alert('Mindestens ein Service muss aktiviert sein!');
+    alert(I18N.t('msgNoActiveService'));
     return;
   }
   
@@ -595,7 +618,7 @@ async function pasteImageToAll() {
     }
     
     if (!imageBlob) {
-      alert('Kein Bild in der Zwischenablage gefunden!');
+      alert(I18N.t('msgNoImage'));
       return;
     }
     
@@ -690,7 +713,7 @@ async function pasteImageToAll() {
     
   } catch (e) {
     console.error('Clipboard access error:', e);
-    alert('Fehler beim Zugriff auf die Zwischenablage: ' + e.message);
+    alert(I18N.t('msgClipboardError') + ': ' + e.message);
     pasteImageButton.disabled = false;
   }
 }
@@ -938,7 +961,7 @@ async function copyResponse(serviceId) {
   const result = await getLastResponse(serviceId);
   
   if (!result?.success || !result.text) {
-    alert(`Keine Antwort von ${serviceId} gefunden.`);
+    alert(I18N.t('msgNoResponseFrom').replace('{service}', serviceId));
     return;
   }
   
@@ -956,7 +979,7 @@ async function copyResponse(serviceId) {
     console.log(`[${serviceId}] Response copied (${result.text.length} chars)`);
   } catch (e) {
     console.error('Copy failed:', e);
-    alert('Kopieren fehlgeschlagen: ' + e.message);
+    alert(I18N.t('msgCopyFailed') + ': ' + e.message);
   }
 }
 
@@ -969,22 +992,16 @@ async function crossCompare(targetServiceId) {
     .filter(([id]) => id !== targetServiceId);
   
   if (otherResponses.length === 0) {
-    alert('Keine Antworten von anderen Services gefunden.');
+    alert(I18N.t('msgNoResponse'));
     return;
   }
   
-  // Vergleichs-Prompt aus Config bauen
-  const prompts = config.prompts || {};
-  let comparePrompt = prompts.compareIntro || 'Vergleiche und bewerte die folgenden Antworten verschiedener KIs:\n\n';
+  // Vergleichs-Prompt aus i18n
+  let comparePrompt = I18N.t('crossComparePrompt');
   
   otherResponses.forEach(([id, data]) => {
-    const separator = (prompts.answerSeparator || '--- {name} ---\n{text}\n\n')
-      .replace('{name}', data.name)
-      .replace('{text}', data.text);
-    comparePrompt += separator;
+    comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
-  
-  comparePrompt += prompts.compareOutro || '---\n\nBewerte anhand der Argumente, welche Antwort am besten/richtigsten ist. Begründe deine Einschätzung.';
   
   // In Ziel-Service einfügen
   const service = config.services.find(s => s.id === targetServiceId);
@@ -1013,22 +1030,16 @@ async function compareAll() {
   const responseList = Object.entries(responses);
   
   if (responseList.length < 2) {
-    alert('Mindestens 2 Services müssen Antworten haben.');
+    alert(I18N.t('msgMinServices') || 'At least 2 services must have responses.');
     return;
   }
   
-  // Vergleichs-Prompt aus Config bauen
-  const prompts = config.prompts || {};
-  let comparePrompt = prompts.compareIntro || 'Vergleiche und bewerte die folgenden Antworten verschiedener KIs:\n\n';
+  // Vergleichs-Prompt aus i18n
+  let comparePrompt = I18N.t('comparePrompt');
   
   responseList.forEach(([id, data]) => {
-    const separator = (prompts.answerSeparator || '--- {name} ---\n{text}\n\n')
-      .replace('{name}', data.name)
-      .replace('{text}', data.text);
-    comparePrompt += separator;
+    comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
-  
-  comparePrompt += prompts.compareOutro || '---\n\nBewerte anhand der Argumente, welche Antwort am besten/richtigsten ist. Begründe deine Einschätzung.';
   
   // In ALLE aktiven Services einfügen
   for (const serviceId of userSettings.activeServices) {
@@ -1286,7 +1297,7 @@ async function updateVoteDisplay() {
   
   const total = votes.ja.length + votes.nein.length + votes.unklar.length;
   if (total === 0) {
-    voteDisplay.innerHTML = '<span class="vote-neutral">Keine Antworten erkannt</span>';
+    voteDisplay.innerHTML = `<span class="vote-neutral">${I18N.t('voteNoResponses')}</span>`;
     return;
   }
   
@@ -1299,8 +1310,8 @@ async function updateVoteDisplay() {
   
   // Kompakte Zahlen-Anzeige
   html += '<div class="vote-counts">';
-  html += `<span class="vote-count vote-yes" title="${jaNames}">Ja: ${votes.ja.length}</span>`;
-  html += `<span class="vote-count vote-no" title="${neinNames}">Nein: ${votes.nein.length}</span>`;
+  html += `<span class="vote-count vote-yes" title="${jaNames}">${I18N.t('voteYes')}: ${votes.ja.length}</span>`;
+  html += `<span class="vote-count vote-no" title="${neinNames}">${I18N.t('voteNo')}: ${votes.nein.length}</span>`;
   if (votes.unklar.length > 0) {
     html += `<span class="vote-count vote-unclear" title="${unklarNames}">?: ${votes.unklar.length}</span>`;
   }
@@ -1309,13 +1320,13 @@ async function updateVoteDisplay() {
   // Mehrheit bestimmen mit farbiger Anzeige
   html += '<div class="vote-result-container">';
   if (votes.ja.length > votes.nein.length) {
-    html += '<span class="vote-result vote-result-yes">MEHRHEIT: JA</span>';
+    html += `<span class="vote-result vote-result-yes">${I18N.t('voteMajorityYes')}</span>`;
   } else if (votes.nein.length > votes.ja.length) {
-    html += '<span class="vote-result vote-result-no">MEHRHEIT: NEIN</span>';
+    html += `<span class="vote-result vote-result-no">${I18N.t('voteMajorityNo')}</span>`;
   } else if (votes.ja.length === votes.nein.length && votes.ja.length > 0) {
-    html += '<span class="vote-result vote-result-tie">UNENTSCHIEDEN</span>';
+    html += `<span class="vote-result vote-result-tie">${I18N.t('voteTie')}</span>`;
   } else {
-    html += '<span class="vote-result vote-result-unclear">UNKLAR</span>';
+    html += `<span class="vote-result vote-result-unclear">${I18N.t('voteUnclearResult')}</span>`;
   }
   html += '</div>';
   
@@ -1667,16 +1678,98 @@ function updateSessionNavButtons() {
   if (backBtn) {
     backBtn.disabled = sessionHistoryIndex <= 0;
     backBtn.title = sessionHistoryIndex > 0 
-      ? `Vorherige Session (${sessionHistoryIndex} von ${sessionHistory.length})`
-      : 'Keine vorherige Session';
+      ? `${I18N.t('msgSessionPrev')} (${sessionHistoryIndex}/${sessionHistory.length})`
+      : I18N.t('msgNoSessionPrev');
   }
   
   if (forwardBtn) {
     forwardBtn.disabled = sessionHistoryIndex >= sessionHistory.length;
     forwardBtn.title = sessionHistoryIndex < sessionHistory.length
-      ? `Nächste Session`
-      : 'Aktuelle Session';
+      ? I18N.t('msgSessionNext')
+      : I18N.t('msgSessionCurrent');
   }
+}
+
+// ============================================
+// INTERNATIONALISIERUNG (i18n)
+// ============================================
+
+function updateUILanguage() {
+  // Prompt-Eingabe Placeholder
+  promptInput.placeholder = I18N.t('promptPlaceholder');
+  
+  // Toolbar Buttons
+  const pasteBtn = document.getElementById('paste-image-button');
+  if (pasteBtn) pasteBtn.title = I18N.t('tooltipPasteImage');
+  
+  const sendBtn = document.getElementById('send-button');
+  if (sendBtn) sendBtn.title = I18N.t('tooltipSend');
+  
+  // Layout Buttons
+  document.querySelectorAll('.layout-btn').forEach(btn => {
+    const layout = btn.dataset.layout;
+    if (layout === 'grid') btn.title = I18N.t('tooltipGrid');
+    if (layout === 'horizontal') btn.title = I18N.t('tooltipHorizontal');
+    if (layout === 'vertical') btn.title = I18N.t('tooltipVertical');
+  });
+  
+  // Vote/Compare Buttons
+  const voteBtn = document.getElementById('vote-check-btn');
+  if (voteBtn) {
+    voteBtn.title = I18N.t('tooltipVote');
+    voteBtn.textContent = I18N.t('btnVote');
+  }
+  
+  const compareBtn = document.getElementById('compare-all-btn');
+  if (compareBtn) {
+    compareBtn.title = I18N.t('tooltipCompareAll');
+    compareBtn.textContent = I18N.t('btnCompare');
+  }
+  
+  // Session Navigation
+  const sessionBackBtn = document.getElementById('session-back-btn');
+  if (sessionBackBtn) sessionBackBtn.title = I18N.t('tooltipSessionBack');
+  
+  const sessionForwardBtn = document.getElementById('session-forward-btn');
+  if (sessionForwardBtn) sessionForwardBtn.title = I18N.t('tooltipSessionForward');
+  
+  // Language Button (Flagge aktualisieren)
+  const langBtn = document.getElementById('language-btn');
+  if (langBtn) {
+    langBtn.textContent = I18N.getCurrentFlag();
+    langBtn.title = I18N.t('tooltipLanguage');
+  }
+  
+  // Refresh Button
+  const refreshBtn = document.getElementById('refresh-all');
+  if (refreshBtn) refreshBtn.title = I18N.t('tooltipRefresh');
+  
+  // Alle Elemente mit data-i18n-title aktualisieren
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.dataset.i18nTitle;
+    el.title = I18N.t(key);
+  });
+  
+  // Session-Buttons aktualisieren
+  updateSessionNavButtons();
+  
+  console.log('UI language updated to:', I18N.currentLang);
+}
+
+function reloadWebviewsWithLanguage() {
+  // Sprache im Main-Process setzen (für Accept-Language Header)
+  window.electronAPI.setLanguage(I18N.currentLang);
+  
+  // Webviews neu laden damit neue Sprache wirkt
+  Object.values(webviews).forEach(webview => {
+    try {
+      webview.reload();
+    } catch (e) {
+      console.error('Error reloading webview:', e);
+    }
+  });
+  
+  console.log('Webviews reloading with language:', I18N.currentLang);
 }
 
 // Expose for debugging

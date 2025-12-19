@@ -1,4 +1,5 @@
 {
   "activeServices": ["copilot", "claude", "gemini", "chatgpt"],
-  "layout": "grid"
+  "layout": "grid",
+  "language": "de"
 }
