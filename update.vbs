@@ -147,7 +147,7 @@ End Function
 Sub DownloadAllFiles()
     Dim files, f
     files = Array("main.js","renderer.js","preload.js","index.html","styles.css", _
-                  "package.json","vote-patterns.js","README.md","status.hta","disclaimer.hta","Uninstall.hta", _
+                  "package.json","README.md","status.hta","disclaimer.hta","Uninstall.hta", _
                   "config.json.template","user-settings.json.template","security-report.pdf")
     For Each f In files
         WriteStatus "Lade " & f & "..."
