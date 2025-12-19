@@ -1020,10 +1020,17 @@ async function evaluateYesNo() {
 
 // Vote-Erkennung mit verschiedenen Strategien
 function detectVote(text, strategy) {
-  const lowerText = text.toLowerCase();
+  // Text vorbereiten (Emojis/Symbole am Anfang entfernen)
+  const cleanedText = VotePatterns.cleanText(text);
+  const lowerText = cleanedText.toLowerCase();
   
-  // ZUERST: Meta-Aussagen erkennen (keine echte Ja/Nein Antwort)
-  if (isMetaStatement(lowerText)) {
+  // ZUERST: Meta-Aussagen erkennen (Rankings, Vergleiche)
+  if (VotePatterns.isMeta(lowerText)) {
+    return 'unklar';
+  }
+  
+  // DANN: Rückfragen erkennen
+  if (VotePatterns.isUnclear(lowerText)) {
     return 'unklar';
   }
   
@@ -1062,51 +1069,36 @@ function isMetaStatement(text) {
   
   // Einfache Patterns die auf Meta-Aussagen hinweisen
   const metaPatterns = [
-    /„ja"\s*(oder|und|\/)\s*„nein"/i,      // „Ja" oder „Nein"
-    /"ja"\s*(oder|und|\/)\s*"nein"/i,      // "Ja" oder "Nein"
-    /\bja\s*(oder|und)\s*nein\b/i,         // Ja oder Nein
-    /\bja\s*\/\s*nein\b/i,                 // Ja/Nein
-    /\byes\s*(or|and|\/)\s*no\b/i,         // Yes or No, Yes/No
+    /„ja"\s*(oder|und|\/)\s*„nein"/i,
+    /"ja"\s*(oder|und|\/)\s*"nein"/i,
+    /\bja\s*(oder|und)\s*nein\b/i,
+    /\bja\s*\/\s*nein\b/i,
+    /\byes\s*(or|and|\/)\s*no\b/i,
   ];
   
   return metaPatterns.some(pattern => pattern.test(start));
 }
 
-// Strategie: Feste Muster - NUR explizite Ja/Nein Antworten
+// Strategie: Feste Muster aus VotePatterns
 function detectByPattern(text) {
-  const start = text.substring(0, 150).toLowerCase();
+  const start = text.substring(0, 200).toLowerCase();
   
-  // Nur echte Ja/Nein Antworten am Anfang - KEINE allgemeinen Adjektive!
-  const jaPatterns = [
-    /^ja[\s\.,!\-–:,]/,                      // "Ja, ..." am Anfang
-    /^yes[\s\.,!\-–:,]/,                     // "Yes, ..." am Anfang
-    /^.{0,25}:\s*ja[\s\.,!\-–,]/,            // "Kurzantwort: Ja"
-    /^.{0,25}:\s*yes[\s\.,!\-–,]/,           // "Short answer: Yes"
-  ];
-  
-  const neinPatterns = [
-    /^nein[\s\.,!\-–:,]/,                    // "Nein, ..." am Anfang
-    /^no[\s\.,!\-–:,]/,                      // "No, ..." am Anfang
-    /^.{0,25}:\s*nein[\s\.,!\-–,]/,          // "Kurzantwort: Nein"
-    /^.{0,25}:\s*no[\s\.,!\-–,]/,            // "Short answer: No"
-  ];
-  
-  const isJa = jaPatterns.some(p => p.test(start));
-  const isNein = neinPatterns.some(p => p.test(start));
+  // Patterns aus externer Datei nutzen
+  const isJa = VotePatterns.jaPatterns.some(p => p.test(start));
+  const isNein = VotePatterns.neinPatterns.some(p => p.test(start));
   
   if (isJa && !isNein) return 'ja';
   if (isNein && !isJa) return 'nein';
   return 'unklar';
 }
 
-// Strategie: Erstes Wort gewinnt - NUR ja/nein am Satzanfang
+// Strategie: Erstes Wort gewinnt
 function detectByFirst(text) {
-  // Nur in den ersten 100 Zeichen suchen
-  const start = text.substring(0, 100).toLowerCase();
+  const start = text.substring(0, 150).toLowerCase();
   
-  // Suche nach Ja/Nein am Satzanfang (nach . ! ? oder am Textanfang)
-  const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes)[\s\.,!\-–:,]/);
-  const neinMatch = start.match(/(?:^|[.!?]\s*)(nein|no)[\s\.,!\-–:,]/);
+  // Suche nach Ja/Nein am Satzanfang
+  const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes|jawohl|genau|absolut|definitiv)[\s\.,!\-–:;,\n\r]/i);
+  const neinMatch = start.match(/(?:^|[.!?]\s*)(nein|no|nicht|keineswegs|niemals)[\s\.,!\-–:;,\n\r]/i);
   
   if (!jaMatch && !neinMatch) return 'unklar';
   if (jaMatch && !neinMatch) return 'ja';
@@ -1118,13 +1110,12 @@ function detectByFirst(text) {
   return 'unklar';
 }
 
-// Strategie: Zählen - NUR ja/nein in ersten 150 Zeichen
+// Strategie: Zählen
 function detectByCount(text) {
-  const start = text.substring(0, 150).toLowerCase();
+  const start = text.substring(0, 200).toLowerCase();
   
-  // Nur echte ja/nein Wörter am Satzanfang zählen
-  const jaMatches = start.match(/(?:^|[.!?]\s*)(ja|yes)[\s\.,!\-–:,]/g) || [];
-  const neinMatches = start.match(/(?:^|[.!?]\s*)(nein|no)[\s\.,!\-–:,]/g) || [];
+  const jaMatches = start.match(/\b(ja|yes|jawohl)\b/gi) || [];
+  const neinMatches = start.match(/\b(nein|no|nicht)\b/gi) || [];
   
   const jaCount = jaMatches.length;
   const neinCount = neinMatches.length;
@@ -1135,30 +1126,30 @@ function detectByCount(text) {
   return 'unklar';
 }
 
-// Strategie: Gewichtet - NUR ja/nein, hohe Gewichtung am Anfang
+// Strategie: Gewichtet
 function detectByWeighted(text) {
-  const start = text.substring(0, 200).toLowerCase();
+  const start = text.substring(0, 250).toLowerCase();
   
   let jaScore = 0;
   let neinScore = 0;
   
-  // Nur echte ja/nein Wörter (keine Adjektive wie "richtig")
-  const jaWords = /\b(ja|yes)\b/gi;
-  const neinWords = /\b(nein|no)\b/gi;
+  // Wörter aus VotePatterns
+  const jaWordsRegex = new RegExp('\\b(' + VotePatterns.jaWords.join('|') + ')\\b', 'gi');
+  const neinWordsRegex = new RegExp('\\b(' + VotePatterns.neinWords.join('|') + ')\\b', 'gi');
   
   let match;
   
   // Ja-Wörter gewichten
-  while ((match = jaWords.exec(start)) !== null) {
+  while ((match = jaWordsRegex.exec(start)) !== null) {
     jaScore += getPositionWeight(match.index, start);
   }
   
   // Nein-Wörter gewichten
-  while ((match = neinWords.exec(start)) !== null) {
+  while ((match = neinWordsRegex.exec(start)) !== null) {
     neinScore += getPositionWeight(match.index, start);
   }
   
-  // Mindestens 5 Punkte für klares Ergebnis (= muss am Satzanfang sein)
+  // Mindestens 5 Punkte für klares Ergebnis
   if (jaScore === 0 && neinScore === 0) return 'unklar';
   if (jaScore >= 5 && jaScore > neinScore) return 'ja';
   if (neinScore >= 5 && neinScore > jaScore) return 'nein';
@@ -1168,7 +1159,6 @@ function detectByWeighted(text) {
 
 // Gewicht basierend auf Position
 function getPositionWeight(position, text) {
-  // Am Satzanfang (nach . ! ? oder am Textanfang)
   const beforeText = text.substring(Math.max(0, position - 5), position);
   const isAfterSentenceEnd = /[.!?\n]\s*$/.test(beforeText) || position < 3;
   
