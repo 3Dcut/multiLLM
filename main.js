@@ -85,6 +85,13 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
+  // Beim Schließen Session speichern
+  mainWindow.on('close', () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.executeJavaScript('saveCurrentSession().catch(() => {})');
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -111,6 +118,31 @@ ipcMain.handle('copy-to-clipboard', (event, text) => {
 
 ipcMain.handle('read-clipboard', () => {
   return clipboard.readText();
+});
+
+// File Handler (für History-Dateien)
+ipcMain.handle('read-file', (event, filename) => {
+  try {
+    const filePath = path.join(__dirname, filename);
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    return null;
+  } catch (e) {
+    console.error('Error reading file:', filename, e);
+    return null;
+  }
+});
+
+ipcMain.handle('write-file', (event, filename, data) => {
+  try {
+    const filePath = path.join(__dirname, filename);
+    fs.writeFileSync(filePath, data, 'utf8');
+    return true;
+  } catch (e) {
+    console.error('Error writing file:', filename, e);
+    return false;
+  }
 });
 
 app.whenReady().then(createWindow);

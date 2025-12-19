@@ -5,5 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUserSettings: () => ipcRenderer.invoke('get-user-settings'),
   saveUserSettings: (settings) => ipcRenderer.invoke('save-user-settings', settings),
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
-  readClipboard: () => ipcRenderer.invoke('read-clipboard')
+  readClipboard: () => ipcRenderer.invoke('read-clipboard'),
+  readFile: (filename) => ipcRenderer.invoke('read-file', filename),
+  writeFile: (filename, data) => ipcRenderer.invoke('write-file', filename, data)
 });

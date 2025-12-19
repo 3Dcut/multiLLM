@@ -6,6 +6,17 @@ let mutedServices = new Set(); // Services die nächste Nachricht überspringen
 let focusedService = null; // Aktuell fokussierter Service
 let previousLayout = null; // Vorheriges Layout für Zurück-Button
 
+// Prompt History (↑/↓ Tasten)
+let promptHistory = [];
+let promptHistoryIndex = -1;
+let currentPromptBackup = ''; // Backup des aktuellen Inputs beim Durchblättern
+const MAX_PROMPT_HISTORY = 100;
+
+// Session History (URLs der Webviews)
+let sessionHistory = [];
+let sessionHistoryIndex = -1;
+const MAX_SESSION_HISTORY = 50;
+
 // DOM Elemente
 const promptInput = document.getElementById('prompt-input');
 const sendButton = document.getElementById('send-button');
@@ -24,11 +35,18 @@ async function init() {
     console.log('Config loaded:', config.services.length, 'services');
     console.log('User settings:', userSettings);
     
+    // Histories laden
+    await loadPromptHistory();
+    await loadSessionHistory();
+    
     // UI aufbauen
     buildStatusBar();
     buildWebViews();
     applyLayout(userSettings.layout);
     setupEventListeners();
+    
+    // Session-Navigation Buttons aktualisieren
+    updateSessionNavButtons();
     
   } catch (e) {
     console.error('Error initializing:', e);
@@ -330,6 +348,11 @@ async function sendToAll() {
   // Vote zurücksetzen bei neuer Nachricht
   resetVotes();
   
+  // Prompt zur History hinzufügen (nur wenn echter Text, nicht ".")
+  if (text !== '.') {
+    addToPromptHistory(text);
+  }
+  
   sendButton.disabled = true;
   sendButton.innerHTML = '<span>⏳</span>';
   
@@ -423,6 +446,23 @@ function setupEventListeners() {
       e.preventDefault();
       sendToAll();
     }
+    
+    // Pfeiltasten für Prompt-History (nur wenn Cursor am Anfang/Ende)
+    if (e.key === 'ArrowUp' && promptHistory.length > 0) {
+      const cursorAtStart = promptInput.selectionStart === 0 && promptInput.selectionEnd === 0;
+      if (cursorAtStart || promptInput.value === '') {
+        e.preventDefault();
+        navigatePromptHistory(-1);
+      }
+    }
+    
+    if (e.key === 'ArrowDown' && promptHistoryIndex >= 0) {
+      const cursorAtEnd = promptInput.selectionStart === promptInput.value.length;
+      if (cursorAtEnd) {
+        e.preventDefault();
+        navigatePromptHistory(1);
+      }
+    }
   });
   
   // Global Keyboard Shortcut für Bild-Paste
@@ -473,7 +513,10 @@ function setupEventListeners() {
   });
   
   // Refresh All - Neue Session (URL neu laden)
-  refreshAllButton.addEventListener('click', () => {
+  refreshAllButton.addEventListener('click', async () => {
+    // Aktuelle Session speichern bevor neue gestartet wird
+    await saveCurrentSession();
+    
     resetVotes(); // Vote zurücksetzen
     userSettings.activeServices.forEach(serviceId => {
       const service = config.services.find(s => s.id === serviceId);
@@ -481,6 +524,15 @@ function setupEventListeners() {
         webviews[serviceId].loadURL(service.url);
       }
     });
+  });
+  
+  // Session Navigation Buttons
+  document.getElementById('session-back-btn')?.addEventListener('click', () => {
+    navigateSessionHistory(-1);
+  });
+  
+  document.getElementById('session-forward-btn')?.addEventListener('click', () => {
+    navigateSessionHistory(1);
   });
   
   // Compare All Button
@@ -1388,6 +1440,243 @@ function exitFocus() {
   // Grid-Modus zurücksetzen
   webviewGrid.classList.remove('focus-mode');
   console.log('Focus mode disabled');
+}
+
+// ============================================
+// PROMPT HISTORY (↑/↓ Tasten)
+// ============================================
+
+async function loadPromptHistory() {
+  try {
+    const data = await window.electronAPI.readFile('prompt-history.json');
+    if (data) {
+      promptHistory = JSON.parse(data);
+      console.log('Prompt history loaded:', promptHistory.length, 'entries');
+    }
+  } catch (e) {
+    console.log('No prompt history found, starting fresh');
+    promptHistory = [];
+  }
+}
+
+async function savePromptHistory() {
+  try {
+    await window.electronAPI.writeFile('prompt-history.json', JSON.stringify(promptHistory, null, 2));
+  } catch (e) {
+    console.error('Error saving prompt history:', e);
+  }
+}
+
+function addToPromptHistory(prompt) {
+  // Leere Prompts ignorieren
+  if (!prompt || !prompt.trim()) return;
+  
+  // Duplikate vermeiden (letzter Eintrag)
+  if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === prompt) {
+    return;
+  }
+  
+  promptHistory.push(prompt);
+  
+  // Max-Größe einhalten
+  if (promptHistory.length > MAX_PROMPT_HISTORY) {
+    promptHistory = promptHistory.slice(-MAX_PROMPT_HISTORY);
+  }
+  
+  // Index zurücksetzen
+  promptHistoryIndex = -1;
+  currentPromptBackup = '';
+  
+  savePromptHistory();
+}
+
+function navigatePromptHistory(direction) {
+  if (promptHistory.length === 0) return;
+  
+  // Beim ersten Mal: aktuellen Input sichern
+  if (promptHistoryIndex === -1 && direction === -1) {
+    currentPromptBackup = promptInput.value;
+  }
+  
+  // Neuen Index berechnen
+  const newIndex = promptHistoryIndex + direction;
+  
+  // Zurück zum aktuellen Input
+  if (newIndex < -1) return;
+  if (newIndex >= promptHistory.length) return;
+  
+  if (newIndex === -1) {
+    // Zurück zum gesicherten Input
+    promptInput.value = currentPromptBackup;
+    promptHistoryIndex = -1;
+  } else {
+    // History-Eintrag laden (von hinten nach vorne)
+    const historyIndex = promptHistory.length - 1 - newIndex;
+    promptInput.value = promptHistory[historyIndex];
+    promptHistoryIndex = newIndex;
+  }
+  
+  // Cursor ans Ende setzen
+  promptInput.selectionStart = promptInput.value.length;
+  promptInput.selectionEnd = promptInput.value.length;
+}
+
+// ============================================
+// SESSION HISTORY (◀/▶ Buttons)
+// ============================================
+
+async function loadSessionHistory() {
+  try {
+    const data = await window.electronAPI.readFile('session-history.json');
+    if (data) {
+      sessionHistory = JSON.parse(data);
+      // Index auf "aktuelle Position" setzen (nach der letzten gespeicherten)
+      sessionHistoryIndex = sessionHistory.length;
+      console.log('Session history loaded:', sessionHistory.length, 'sessions');
+    }
+  } catch (e) {
+    console.log('No session history found, starting fresh');
+    sessionHistory = [];
+    sessionHistoryIndex = 0;
+  }
+}
+
+async function saveSessionHistory() {
+  try {
+    await window.electronAPI.writeFile('session-history.json', JSON.stringify(sessionHistory, null, 2));
+    updateSessionNavButtons();
+  } catch (e) {
+    console.error('Error saving session history:', e);
+  }
+}
+
+function getCurrentSessionUrls() {
+  const urls = {};
+  
+  for (const [serviceId, webview] of Object.entries(webviews)) {
+    try {
+      const url = webview.getURL();
+      if (url && !url.startsWith('about:')) {
+        urls[serviceId] = url;
+      }
+    } catch (e) {
+      // Webview noch nicht bereit
+    }
+  }
+  
+  return urls;
+}
+
+async function saveCurrentSession() {
+  const urls = getCurrentSessionUrls();
+  
+  // Nur speichern wenn mindestens eine URL vorhanden
+  if (Object.keys(urls).length === 0) return;
+  
+  // Prüfen ob sich etwas geändert hat
+  if (sessionHistory.length > 0) {
+    const lastSession = sessionHistory[sessionHistory.length - 1];
+    const lastUrls = lastSession.urls;
+    
+    // Vergleichen
+    const hasChanged = Object.keys(urls).some(id => urls[id] !== lastUrls[id]) ||
+                       Object.keys(lastUrls).some(id => lastUrls[id] !== urls[id]);
+    
+    if (!hasChanged) {
+      console.log('Session unchanged, not saving');
+      return;
+    }
+  }
+  
+  const session = {
+    timestamp: new Date().toISOString(),
+    urls: urls
+  };
+  
+  // Wenn wir in der Historie zurückgeblättert haben, alles danach löschen
+  if (sessionHistoryIndex < sessionHistory.length) {
+    sessionHistory = sessionHistory.slice(0, sessionHistoryIndex);
+  }
+  
+  sessionHistory.push(session);
+  
+  // Max-Größe einhalten
+  if (sessionHistory.length > MAX_SESSION_HISTORY) {
+    sessionHistory = sessionHistory.slice(-MAX_SESSION_HISTORY);
+  }
+  
+  sessionHistoryIndex = sessionHistory.length;
+  
+  await saveSessionHistory();
+  console.log('Session saved:', Object.keys(urls).length, 'services');
+}
+
+function navigateSessionHistory(direction) {
+  const newIndex = sessionHistoryIndex + direction;
+  
+  // Grenzen prüfen
+  if (newIndex < 0 || newIndex > sessionHistory.length) return;
+  
+  // Aktuelle Session speichern wenn wir von "aktuell" wegnavigieren
+  if (sessionHistoryIndex === sessionHistory.length && direction === -1) {
+    // Aktuelle URLs als temporäre Session speichern
+    const currentUrls = getCurrentSessionUrls();
+    if (Object.keys(currentUrls).length > 0) {
+      sessionHistory.push({
+        timestamp: new Date().toISOString(),
+        urls: currentUrls,
+        current: true // Markierung für "aktuelle" Session
+      });
+      saveSessionHistory();
+    }
+  }
+  
+  sessionHistoryIndex = newIndex;
+  
+  if (newIndex === sessionHistory.length) {
+    // Zur "aktuellen" Session - nichts laden, einfach zurücksetzen
+    console.log('At current session');
+  } else {
+    // Session laden
+    const session = sessionHistory[newIndex];
+    loadSession(session);
+  }
+  
+  updateSessionNavButtons();
+}
+
+function loadSession(session) {
+  console.log('Loading session from:', session.timestamp);
+  
+  for (const [serviceId, url] of Object.entries(session.urls)) {
+    if (webviews[serviceId]) {
+      try {
+        webviews[serviceId].loadURL(url);
+        console.log('Loaded URL for', serviceId, ':', url.substring(0, 50) + '...');
+      } catch (e) {
+        console.error('Error loading URL for', serviceId, ':', e);
+      }
+    }
+  }
+}
+
+function updateSessionNavButtons() {
+  const backBtn = document.getElementById('session-back-btn');
+  const forwardBtn = document.getElementById('session-forward-btn');
+  
+  if (backBtn) {
+    backBtn.disabled = sessionHistoryIndex <= 0;
+    backBtn.title = sessionHistoryIndex > 0 
+      ? `Vorherige Session (${sessionHistoryIndex} von ${sessionHistory.length})`
+      : 'Keine vorherige Session';
+  }
+  
+  if (forwardBtn) {
+    forwardBtn.disabled = sessionHistoryIndex >= sessionHistory.length;
+    forwardBtn.title = sessionHistoryIndex < sessionHistory.length
+      ? `Nächste Session`
+      : 'Aktuelle Session';
+  }
 }
 
 // Expose for debugging
