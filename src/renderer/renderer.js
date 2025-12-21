@@ -2,14 +2,14 @@
 let config = { services: [] };
 let userSettings = { activeServices: [], layout: 'grid' };
 let webviews = {};
-let mutedServices = new Set(); // Services die nächste Nachricht überspringen
-let focusedService = null; // Aktuell fokussierter Service
-let previousLayout = null; // Vorheriges Layout für Zurück-Button
+let mutedServices = new Set();
+let focusedService = null;
+let previousLayout = null;
 
 // Prompt History (↑/↓ Tasten)
 let promptHistory = [];
 let promptHistoryIndex = -1;
-let currentPromptBackup = ''; // Backup des aktuellen Inputs beim Durchblättern
+let currentPromptBackup = '';
 const MAX_PROMPT_HISTORY = 100;
 
 // Session History (URLs der Webviews)
@@ -25,36 +25,89 @@ const refreshAllButton = document.getElementById('refresh-all');
 const statusBar = document.getElementById('status-bar');
 const webviewGrid = document.getElementById('webview-grid');
 
+// Helper: Button-Feedback-Pattern
+function setButtonFeedback(selector, emoji, original, delay = 1000) {
+  const btn = document.querySelector(selector);
+  if (btn) {
+    btn.textContent = emoji;
+    setTimeout(() => btn.textContent = original, delay);
+  }
+}
+
+// Helper: Wartefunktion für Scripts
+const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
+
+// Helper: Gemeinsame findElement-Funktion für Scripts
+const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
+  for (const selector of selectors) {
+    try {
+      const el = document.querySelector(selector);
+      if (el) {
+        ${log ? `console.log('[${serviceId}] Found with selector:', selector);` : ''}
+        return el;
+      }
+    } catch (e) {}
+  }
+  return null;
+}`;
+
+// Helper: Gemeinsame Editor-Insertion-Logik
+const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
+  element.focus();
+  ${wait(100)}
+  
+  // Textarea/Input
+  if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+    element.value = text;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    console.log('[${serviceId}] Set textarea value');
+    return true;
+  }
+  
+  // Editor-spezifische Behandlung
+  const isQuill = ${editorType} === 'quill' || element.classList.contains('ql-editor');
+  const isProseMirror = ${editorType} === 'prosemirror' || element.classList.contains('ProseMirror');
+  const isLexical = ${editorType} === 'lexical' || element.hasAttribute('data-lexical-editor');
+  
+  if (isQuill || isProseMirror || isLexical || element.isContentEditable) {
+    ${isQuill ? `console.log('[${serviceId}] Using Quill insertion');` : ''}
+    ${isProseMirror ? `console.log('[${serviceId}] Using ProseMirror insertion');
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection.removeAllRanges();
+    selection.addRange(range);` : 'document.execCommand(\'selectAll\', false, null);'}
+    document.execCommand('delete', false, null);
+    ${wait(50)}
+    document.execCommand('insertText', false, text);
+    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    return true;
+  }
+  
+  return false;
+}`;
+
 // Initialisierung
 async function init() {
   try {
-    // Configs laden
     config = await window.electronAPI.getConfig();
     userSettings = await window.electronAPI.getUserSettings();
     
     console.log('Config loaded:', config.services.length, 'services');
-    console.log('User settings:', userSettings);
     
-    // Sprache initialisieren
     if (userSettings.language && I18N.translations[userSettings.language]) {
       I18N.setLanguage(userSettings.language);
     }
-    console.log('Language:', I18N.currentLang);
     
-    // Histories laden
     await loadPromptHistory();
     await loadSessionHistory();
     
-    // UI aufbauen
     buildStatusBar();
     buildWebViews();
     applyLayout(userSettings.layout);
     setupEventListeners();
-    
-    // UI-Texte aktualisieren
     updateUILanguage();
-    
-    // Session-Navigation Buttons aktualisieren
     updateSessionNavButtons();
     
   } catch (e) {
@@ -69,7 +122,6 @@ function buildStatusBar() {
   
   config.services.forEach(service => {
     const isActive = userSettings.activeServices.includes(service.id);
-    
     const statusItem = document.createElement('div');
     statusItem.className = `status-item ${isActive ? '' : 'disabled'}`;
     statusItem.dataset.service = service.id;
@@ -94,11 +146,10 @@ function buildWebViews() {
   
   config.services.forEach(service => {
     const isActive = userSettings.activeServices.includes(service.id);
-    
     const container = document.createElement('div');
     container.className = `webview-container ${isActive ? '' : 'hidden'}`;
     container.id = `${service.id}-container`;
-    container.dataset.service = service.id; // Für Overlay-Zuordnung
+    container.dataset.service = service.id;
     
     container.innerHTML = `
       <div class="webview-header" style="border-left: 3px solid ${service.color}">
@@ -120,12 +171,9 @@ function buildWebViews() {
     `;
     
     webviewGrid.appendChild(container);
-    
-    // WebView referenzieren
     const webview = container.querySelector('webview');
     webviews[service.id] = webview;
     
-    // WebView Events
     webview.addEventListener('did-start-loading', () => updateStatus(service.id, 'loading'));
     webview.addEventListener('did-finish-load', () => updateStatus(service.id, 'ready'));
     webview.addEventListener('did-fail-load', () => updateStatus(service.id, 'error'));
@@ -135,23 +183,16 @@ function buildWebViews() {
   updateGridCount();
 }
 
-// Grid-Count für CSS aktualisieren
 function updateGridCount() {
   const activeCount = userSettings.activeServices.length;
-  
-  // Entferne alte count-Klassen
   webviewGrid.className = webviewGrid.className.replace(/count-\d+/g, '').trim();
-  
-  // Füge neue count-Klasse hinzu
   webviewGrid.classList.add(`count-${activeCount}`);
 }
 
-// Layout anwenden
 function applyLayout(layout) {
   webviewGrid.classList.remove('layout-grid', 'layout-horizontal', 'layout-vertical');
   webviewGrid.classList.add(`layout-${layout}`);
   
-  // Button-Status aktualisieren
   document.querySelectorAll('.layout-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.layout === layout);
   });
@@ -159,7 +200,6 @@ function applyLayout(layout) {
   userSettings.layout = layout;
 }
 
-// Status aktualisieren
 function updateStatus(serviceId, status) {
   const statusItem = document.querySelector(`.status-item[data-service="${serviceId}"]`);
   if (statusItem && userSettings.activeServices.includes(serviceId)) {
@@ -168,7 +208,6 @@ function updateStatus(serviceId, status) {
   }
 }
 
-// Service aktivieren/deaktivieren
 function toggleService(serviceId, enabled) {
   const container = document.getElementById(`${serviceId}-container`);
   const statusItem = document.querySelector(`.status-item[data-service="${serviceId}"]`);
@@ -187,15 +226,11 @@ function toggleService(serviceId, enabled) {
   
   updateGridCount();
   saveSettings();
-  
-  console.log(`[${serviceId}] ${enabled ? 'Aktiviert' : 'Deaktiviert'}`);
 }
 
-// Einstellungen speichern
 async function saveSettings() {
   try {
     await window.electronAPI.saveUserSettings(userSettings);
-    console.log('Settings saved');
   } catch (e) {
     console.error('Error saving settings:', e);
   }
@@ -204,97 +239,23 @@ async function saveSettings() {
 // Injection Script erstellen
 function createInjectionScript(service, text) {
   const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  const editorType = service.editorType || 'default';
   
   return `
     (async function() {
       const text = \`${escapedText}\`;
       const inputSelectors = ${JSON.stringify(service.inputSelectors)};
       const submitSelectors = ${JSON.stringify(service.submitSelectors)};
-      const editorType = '${service.editorType || 'default'}';
+      const editorType = '${editorType}';
       
       console.log('[${service.id}] Starting injection...');
       
-      // Element finden
-      function findElement(selectors) {
-        for (const selector of selectors) {
-          try {
-            const el = document.querySelector(selector);
-            if (el) {
-              console.log('[${service.id}] Found with selector:', selector);
-              return el;
-            }
-          } catch (e) {}
-        }
-        return null;
-      }
+      ${findElementFn(service.id, true)}
+      ${insertTextFn(service.id, editorType)}
       
-      // Text einfügen
-      async function insertText(element, text) {
-        element.focus();
-        await new Promise(r => setTimeout(r, 100));
-        
-        // Quill Editor (Gemini)
-        if (editorType === 'quill' || element.classList.contains('ql-editor')) {
-          console.log('[${service.id}] Using Quill-compatible insertion');
-          document.execCommand('selectAll', false, null);
-          document.execCommand('delete', false, null);
-          await new Promise(r => setTimeout(r, 50));
-          document.execCommand('insertText', false, text);
-          element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-          return true;
-        }
-        
-        // ProseMirror (Claude, Mistral)
-        if (editorType === 'prosemirror' || element.classList.contains('ProseMirror')) {
-          console.log('[${service.id}] Using ProseMirror insertion');
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(element);
-          selection.removeAllRanges();
-          selection.addRange(range);
-          document.execCommand('delete', false, null);
-          await new Promise(r => setTimeout(r, 50));
-          document.execCommand('insertText', false, text);
-          element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-          return true;
-        }
-        
-        // Lexical Editor (Perplexity)
-        if (editorType === 'lexical' || element.hasAttribute('data-lexical-editor')) {
-          console.log('[${service.id}] Using Lexical insertion');
-          element.focus();
-          document.execCommand('selectAll', false, null);
-          document.execCommand('delete', false, null);
-          await new Promise(r => setTimeout(r, 50));
-          document.execCommand('insertText', false, text);
-          element.dispatchEvent(new Event('input', { bubbles: true }));
-          return true;
-        }
-        
-        // Textarea/Input
-        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
-          element.value = text;
-          element.dispatchEvent(new Event('input', { bubbles: true }));
-          element.dispatchEvent(new Event('change', { bubbles: true }));
-          console.log('[${service.id}] Set textarea value');
-          return true;
-        }
-        
-        // Generic contenteditable (Copilot, etc.)
-        console.log('[${service.id}] Using generic contenteditable insertion');
-        element.focus();
-        document.execCommand('selectAll', false, null);
-        document.execCommand('delete', false, null);
-        await new Promise(r => setTimeout(r, 50));
-        document.execCommand('insertText', false, text);
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-        return true;
-      }
-      
-      // Input finden
       let inputEl = findElement(inputSelectors);
       if (!inputEl) {
-        await new Promise(r => setTimeout(r, 1000));
+        ${wait(1000)}
         inputEl = findElement(inputSelectors);
       }
       
@@ -303,16 +264,14 @@ function createInjectionScript(service, text) {
         return { success: false, error: 'Input not found' };
       }
       
-      // Text einfügen
       await insertText(inputEl, text);
-      await new Promise(r => setTimeout(r, 500));
+      ${wait(500)}
       
-      // Submit Button finden und klicken
       let submitBtn = null;
       for (let i = 0; i < 10; i++) {
         submitBtn = findElement(submitSelectors);
         if (submitBtn && !submitBtn.disabled) break;
-        await new Promise(r => setTimeout(r, 200));
+        ${wait(200)}
         submitBtn = null;
       }
       
@@ -322,7 +281,6 @@ function createInjectionScript(service, text) {
         return { success: true, method: 'button' };
       }
       
-      // Fallback: Enter
       console.log('[${service.id}] Trying Enter key');
       inputEl.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
@@ -333,34 +291,17 @@ function createInjectionScript(service, text) {
   `;
 }
 
-// An alle aktiven Services senden
 async function sendToAll() {
-  let text = promptInput.value.trim();
+  let text = promptInput.value.trim() || '.';
   
-  // Fallback: Wenn kein Text, aber evtl. ein Bild eingefügt wurde, "." als Platzhalter
-  if (!text) {
-    text = '.';
-    console.log('No text entered, using fallback "." for services that require text input');
-  }
-  
-  // Aktive Services ohne gemutete
   const activeNonMuted = userSettings.activeServices.filter(id => !mutedServices.has(id));
-  
   if (activeNonMuted.length === 0) {
     alert(I18N.t('msgNoActiveService'));
     return;
   }
   
-  console.log('Sending to active services:', text);
-  console.log('Muted services (skipping):', [...mutedServices]);
-  
-  // Vote zurücksetzen bei neuer Nachricht
   resetVotes();
-  
-  // Prompt zur History hinzufügen (nur wenn echter Text, nicht ".")
-  if (text !== '.') {
-    addToPromptHistory(text);
-  }
+  if (text !== '.') addToPromptHistory(text);
   
   sendButton.disabled = true;
   sendButton.innerHTML = '<span>⏳</span>';
@@ -370,9 +311,7 @@ async function sendToAll() {
     .map(async (service) => {
       try {
         updateStatus(service.id, 'loading');
-        const script = createInjectionScript(service, text);
-        const result = await webviews[service.id].executeJavaScript(script);
-        console.log(`[${service.id}] Result:`, result);
+        const result = await webviews[service.id].executeJavaScript(createInjectionScript(service, text));
         updateStatus(service.id, result?.success ? 'ready' : 'error');
         return { service: service.id, ...result };
       } catch (error) {
@@ -382,81 +321,177 @@ async function sendToAll() {
       }
     });
   
-  const results = await Promise.all(promises);
-  console.log('Send results:', results);
-  
-  // Mutes nach dem Senden aufheben
+  await Promise.all(promises);
   clearMutedServices();
   
   sendButton.disabled = false;
-  sendButton.innerHTML = `
-    <svg viewBox="0 0 24 24" width="20" height="20">
-      <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-    </svg>
-  `;
-  
+  sendButton.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
   promptInput.value = '';
   promptInput.focus();
 }
 
-// Script um Text anzufügen (ohne bestehendes zu löschen) - für Fallback "." bei Bildern
-function createAppendTextScript(service, text) {
+// Script für Bild-Einfügen erstellen
+function createPasteImageScript(service, base64Data, mimeType) {
+  const serviceId = service.id;
+  
   return `
     (async function() {
+      console.log('[${serviceId}] Starting image paste...');
+      
       const inputSelectors = ${JSON.stringify(service.inputSelectors)};
+      ${findElementFn(serviceId)}
       
-      function findElement(selectors) {
-        for (const selector of selectors) {
-          try {
-            const el = document.querySelector(selector);
-            if (el) return el;
-          } catch (e) {}
+      let inputEl = findElement(inputSelectors);
+      if (!inputEl) {
+        ${wait(500)}
+        inputEl = findElement(inputSelectors);
+      }
+      
+      if (!inputEl) {
+        return { success: false, error: 'Input not found' };
+      }
+      
+      try {
+        const base64 = '${base64Data}';
+        const byteString = atob(base64.split(',')[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: '${mimeType}' });
+        const file = new File([blob], 'image.' + '${mimeType}'.split('/')[1], { type: '${mimeType}' });
+        
+        inputEl.focus();
+        ${wait(100)}
+        
+        if ('${serviceId}' === 'mistral') {
+          return { success: false, needsNativePaste: true };
         }
-        return null;
+        
+        // File-Input für ChatGPT und Claude
+        if (['chatgpt', 'claude'].includes('${serviceId}')) {
+          const fileInput = document.querySelector('input[type="file"][accept*="image"]') 
+                         || document.querySelector('input[type="file"]');
+          if (fileInput) {
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            return { success: true, method: 'fileInput' };
+          }
+          
+          // Claude Fallback: Drop
+          if ('${serviceId}' === 'claude') {
+            const dropZone = inputEl.closest('fieldset') || inputEl.closest('form') || inputEl.parentElement;
+            if (dropZone) {
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              dropZone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+              return { success: true, method: 'drop' };
+            }
+          }
+        }
+        
+        // Paste-Event für andere
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        inputEl.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dataTransfer }));
+        return { success: true, method: 'paste' };
+        
+      } catch (e) {
+        return { success: false, error: e.message };
       }
-      
-      const element = findElement(inputSelectors);
-      if (!element) return { success: false, error: 'Input not found' };
-      
-      element.focus();
-      
-      // Cursor ans Ende setzen
-      if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
-        element.value += '${text}';
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-      } else {
-        // contenteditable
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        range.collapse(false); // false = ans Ende
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.execCommand('insertText', false, '${text}');
-        element.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      
-      return { success: true };
     })();
   `;
 }
 
+// Bild aus Zwischenablage in alle aktiven Services einfügen
+async function pasteImageToAll() {
+  if (userSettings.activeServices.length === 0) {
+    alert(I18N.t('msgNoActiveService'));
+    return;
+  }
+  
+  try {
+    const clipboardItems = await navigator.clipboard.read();
+    let imageBlob = null;
+    
+    for (const item of clipboardItems) {
+      const imageType = item.types.find(type => type.startsWith('image/'));
+      if (imageType) {
+        imageBlob = await item.getType(imageType);
+        break;
+      }
+    }
+    
+    if (!imageBlob) {
+      alert(I18N.t('msgNoImage'));
+      return;
+    }
+    
+    pasteImageButton.disabled = true;
+    pasteImageButton.classList.add('has-image');
+    
+    const base64Data = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsDataURL(imageBlob);
+    });
+    
+    const promises = config.services
+      .filter(service => userSettings.activeServices.includes(service.id))
+      .map(async (service) => {
+        try {
+          updateStatus(service.id, 'loading');
+          const script = createPasteImageScript(service, base64Data, imageBlob.type);
+          const result = await webviews[service.id].executeJavaScript(script);
+          
+          if (result?.needsNativePaste) {
+            webviews[service.id].focus();
+            const focusScript = `(async function() {
+              const inputSelectors = ${JSON.stringify(service.inputSelectors)};
+              ${findElementFn(service.id)}
+              const el = findElement(inputSelectors);
+              if (el) { el.click(); el.focus(); ${wait(100)} return true; }
+              return false;
+            })();`;
+            await webviews[service.id].executeJavaScript(focusScript);
+            await new Promise(r => setTimeout(r, 50));
+            webviews[service.id].paste();
+            updateStatus(service.id, 'ready');
+            return { service: service.id, success: true, method: 'nativePaste' };
+          }
+          
+          updateStatus(service.id, result?.success ? 'ready' : 'error');
+          return { service: service.id, ...result };
+        } catch (error) {
+          console.error(`Error pasting to ${service.id}:`, error);
+          updateStatus(service.id, 'error');
+          return { service: service.id, success: false, error: error.message };
+        }
+      });
+    
+    await Promise.all(promises);
+    pasteImageButton.disabled = false;
+    setTimeout(() => pasteImageButton.classList.remove('has-image'), 1000);
+    
+  } catch (e) {
+    console.error('Clipboard access error:', e);
+    alert(I18N.t('msgClipboardError') + ': ' + e.message);
+    pasteImageButton.disabled = false;
+  }
+}
+
 // Event Listeners
 function setupEventListeners() {
-  // Send Button
   sendButton.addEventListener('click', sendToAll);
-  
-  // Paste Image Button
   pasteImageButton.addEventListener('click', pasteImageToAll);
   
-  // Strg+Enter und Strg+Shift+V
   promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
       sendToAll();
     }
     
-    // Pfeiltasten für Prompt-History (nur wenn Cursor am Anfang/Ende)
     if (e.key === 'ArrowUp' && promptHistory.length > 0) {
       const cursorAtStart = promptInput.selectionStart === 0 && promptInput.selectionEnd === 0;
       if (cursorAtStart || promptInput.value === '') {
@@ -474,7 +509,6 @@ function setupEventListeners() {
     }
   });
   
-  // Global Keyboard Shortcut für Bild-Paste
   document.addEventListener('keydown', (e) => {
     if (e.key === 'V' && e.ctrlKey && e.shiftKey) {
       e.preventDefault();
@@ -482,51 +516,35 @@ function setupEventListeners() {
     }
   });
   
-  // Service Toggles
   statusBar.addEventListener('change', (e) => {
     if (e.target.classList.contains('service-toggle')) {
       toggleService(e.target.dataset.service, e.target.checked);
     }
   });
   
-  // Reload, Copy und Compare Buttons
   webviewGrid.addEventListener('click', (e) => {
     const serviceId = e.target.dataset.service;
-    
-    // Debug
-    console.log('Click on:', e.target.tagName, e.target.className, 'serviceId:', serviceId);
+    if (!serviceId) return;
     
     if (e.target.classList.contains('reload-btn')) {
       webviews[serviceId]?.reload();
-    }
-    
-    if (e.target.classList.contains('copy-response-btn')) {
+    } else if (e.target.classList.contains('copy-response-btn')) {
       copyResponse(serviceId);
-    }
-    
-    if (e.target.classList.contains('compare-btn')) {
-      resetVotes(); // Vote zurücksetzen bei Vergleich
+    } else if (e.target.classList.contains('compare-btn')) {
+      resetVotes();
       crossCompare(serviceId);
-    }
-    
-    if (e.target.classList.contains('mute-btn')) {
+    } else if (e.target.classList.contains('mute-btn')) {
       toggleMute(serviceId);
-    }
-    
-    // Focus-Button: unfocus-btn hat Priorität (Button hat beide Klassen wenn fokussiert)
-    if (e.target.classList.contains('unfocus-btn')) {
+    } else if (e.target.classList.contains('unfocus-btn')) {
       exitFocus();
     } else if (e.target.classList.contains('focus-btn')) {
       toggleFocus(serviceId);
     }
   });
   
-  // Refresh All - Neue Session (URL neu laden)
   refreshAllButton.addEventListener('click', async () => {
-    // Aktuelle Session speichern bevor neue gestartet wird
     await saveCurrentSession();
-    
-    resetVotes(); // Vote zurücksetzen
+    resetVotes();
     userSettings.activeServices.forEach(serviceId => {
       const service = config.services.find(s => s.id === serviceId);
       if (service && webviews[serviceId]) {
@@ -535,45 +553,30 @@ function setupEventListeners() {
     });
   });
   
-  // Session Navigation Buttons
-  document.getElementById('session-back-btn')?.addEventListener('click', () => {
-    navigateSessionHistory(-1);
-  });
+  document.getElementById('session-back-btn')?.addEventListener('click', () => navigateSessionHistory(-1));
+  document.getElementById('session-forward-btn')?.addEventListener('click', () => navigateSessionHistory(1));
   
-  document.getElementById('session-forward-btn')?.addEventListener('click', () => {
-    navigateSessionHistory(1);
-  });
-  
-  // Compare All Button
   document.getElementById('compare-all-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('compare-all-btn');
     btn.disabled = true;
     btn.textContent = I18N.t('btnCompareLoading');
-    
-    resetVotes(); // Vote zurücksetzen bei Vergleich
+    resetVotes();
     await compareAll();
-    
     btn.disabled = false;
     btn.textContent = I18N.t('btnCompare');
   });
   
-  // Vote Check Button
   document.getElementById('vote-check-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('vote-check-btn');
     btn.disabled = true;
     btn.textContent = I18N.t('btnVoteLoading');
-    
     await updateVoteDisplay();
-    
-    // Overlay kurz anzeigen und ausfaden
     showVoteOverlays(true);
     setTimeout(() => fadeOutOverlays(), 1000);
-    
     btn.disabled = false;
     btn.textContent = I18N.t('btnVote');
   });
   
-  // Layout Buttons
   document.querySelectorAll('.layout-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       applyLayout(btn.dataset.layout);
@@ -581,273 +584,14 @@ function setupEventListeners() {
     });
   });
   
-  // Language Button
   document.getElementById('language-btn')?.addEventListener('click', () => {
     const nextLang = I18N.getNextLanguage();
     I18N.setLanguage(nextLang);
     userSettings.language = nextLang;
     saveSettings();
     updateUILanguage();
-    
-    // Webviews mit neuer Sprache neu laden (optional, aber nett)
     reloadWebviewsWithLanguage();
-    
-    console.log('Language changed to:', nextLang);
   });
-}
-
-// Bild aus Zwischenablage in alle aktiven Services einfügen
-async function pasteImageToAll() {
-  if (userSettings.activeServices.length === 0) {
-    alert(I18N.t('msgNoActiveService'));
-    return;
-  }
-  
-  try {
-    // Zwischenablage auslesen
-    const clipboardItems = await navigator.clipboard.read();
-    let imageBlob = null;
-    
-    for (const item of clipboardItems) {
-      // Nach Bild-Typen suchen
-      const imageType = item.types.find(type => type.startsWith('image/'));
-      if (imageType) {
-        imageBlob = await item.getType(imageType);
-        break;
-      }
-    }
-    
-    if (!imageBlob) {
-      alert(I18N.t('msgNoImage'));
-      return;
-    }
-    
-    console.log('Found image in clipboard:', imageBlob.type, imageBlob.size, 'bytes');
-    
-    // Button visuell ändern während des Einfügens
-    pasteImageButton.disabled = true;
-    pasteImageButton.classList.add('has-image');
-    
-    // Bild als Base64 konvertieren für Transfer
-    const reader = new FileReader();
-    const base64Promise = new Promise((resolve) => {
-      reader.onload = () => resolve(reader.result);
-      reader.readAsDataURL(imageBlob);
-    });
-    const base64Data = await base64Promise;
-    
-    // In alle aktiven WebViews einfügen
-    const promises = config.services
-      .filter(service => userSettings.activeServices.includes(service.id))
-      .map(async (service) => {
-        try {
-          updateStatus(service.id, 'loading');
-          const script = createPasteImageScript(service, base64Data, imageBlob.type);
-          const result = await webviews[service.id].executeJavaScript(script);
-          console.log(`[${service.id}] Image paste result:`, result);
-          
-          // Mistral braucht natives Paste (Bild ist bereits in System-Zwischenablage)
-          if (result?.needsNativePaste) {
-            console.log(`[${service.id}] Setting focus and using native paste...`);
-            
-            // Erst WebView selbst fokussieren
-            webviews[service.id].focus();
-            
-            // Dann Fokus auf Textbox setzen und warten bis focused-Klasse da ist
-            const focusScript = `
-              (async function() {
-                const inputSelectors = ${JSON.stringify(service.inputSelectors)};
-                for (const selector of inputSelectors) {
-                  try {
-                    const el = document.querySelector(selector);
-                    if (el) {
-                      // Klick simulieren um Fokus zu setzen
-                      el.click();
-                      el.focus();
-                      
-                      // Warten bis ProseMirror-focused Klasse erscheint (max 500ms)
-                      for (let i = 0; i < 10; i++) {
-                        if (el.classList.contains('ProseMirror-focused')) {
-                          console.log('[Mistral] Focus confirmed after ' + (i * 50) + 'ms');
-                          return true;
-                        }
-                        await new Promise(r => setTimeout(r, 50));
-                      }
-                      console.log('[Mistral] Focus class not found, proceeding anyway');
-                      return true;
-                    }
-                  } catch (e) {
-                    console.error('[Mistral] Focus error:', e);
-                  }
-                }
-                return false;
-              })();
-            `;
-            const focusResult = await webviews[service.id].executeJavaScript(focusScript);
-            console.log(`[${service.id}] Focus result:`, focusResult);
-            
-            // Kurz warten
-            await new Promise(r => setTimeout(r, 50));
-            
-            // Dann natives paste
-            webviews[service.id].paste();
-            updateStatus(service.id, 'ready');
-            return { service: service.id, success: true, method: 'nativePaste' };
-          }
-          
-          updateStatus(service.id, result?.success ? 'ready' : 'error');
-          return { service: service.id, ...result };
-        } catch (error) {
-          console.error(`Error pasting to ${service.id}:`, error);
-          updateStatus(service.id, 'error');
-          return { service: service.id, success: false, error: error.message };
-        }
-      });
-    
-    const results = await Promise.all(promises);
-    console.log('Paste results:', results);
-    
-    // Button zurücksetzen
-    pasteImageButton.disabled = false;
-    setTimeout(() => pasteImageButton.classList.remove('has-image'), 1000);
-    
-  } catch (e) {
-    console.error('Clipboard access error:', e);
-    alert(I18N.t('msgClipboardError') + ': ' + e.message);
-    pasteImageButton.disabled = false;
-  }
-}
-
-// Script für Bild-Einfügen erstellen
-function createPasteImageScript(service, base64Data, mimeType) {
-  return `
-    (async function() {
-      console.log('[${service.id}] Starting image paste...');
-      
-      const inputSelectors = ${JSON.stringify(service.inputSelectors)};
-      const editorType = '${service.editorType || 'default'}';
-      const serviceId = '${service.id}';
-      
-      // Input finden
-      function findElement(selectors) {
-        for (const selector of selectors) {
-          try {
-            const el = document.querySelector(selector);
-            if (el) return el;
-          } catch (e) {}
-        }
-        return null;
-      }
-      
-      let inputEl = findElement(inputSelectors);
-      if (!inputEl) {
-        await new Promise(r => setTimeout(r, 500));
-        inputEl = findElement(inputSelectors);
-      }
-      
-      if (!inputEl) {
-        console.error('[${service.id}] Input not found for image paste');
-        return { success: false, error: 'Input not found' };
-      }
-      
-      try {
-        // Base64 zu Blob konvertieren
-        const base64 = '${base64Data}';
-        const byteString = atob(base64.split(',')[1]);
-        const mimeType = '${mimeType}';
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) {
-          ia[i] = byteString.charCodeAt(i);
-        }
-        const blob = new Blob([ab], { type: mimeType });
-        const file = new File([blob], 'image.' + mimeType.split('/')[1], { type: mimeType });
-        
-        // Focus auf Input
-        inputEl.focus();
-        await new Promise(r => setTimeout(r, 100));
-        
-        // Mistral: Braucht natives Paste via webview.paste()
-        if (serviceId === 'mistral') {
-          console.log('[${service.id}] Mistral needs native paste');
-          return { success: false, needsNativePaste: true };
-        }
-        
-        // ChatGPT: File-Input nutzen
-        if (serviceId === 'chatgpt') {
-          console.log('[${service.id}] Looking for file input...');
-          
-          // Versteckten File-Input suchen
-          const fileInput = document.querySelector('input[type="file"][accept*="image"]') 
-                         || document.querySelector('input[type="file"]');
-          
-          if (fileInput) {
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            fileInput.files = dataTransfer.files;
-            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log('[${service.id}] Used file input');
-            return { success: true, method: 'fileInput' };
-          } else {
-            console.log('[${service.id}] No file input found, trying paste event');
-          }
-        }
-        
-        // Claude: Braucht speziellen Upload-Button Ansatz
-        if (serviceId === 'claude') {
-          console.log('[${service.id}] Claude detected, trying file input method');
-          
-          // Suche nach verstecktem File-Input
-          const fileInput = document.querySelector('input[type="file"]');
-          if (fileInput) {
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            fileInput.files = dataTransfer.files;
-            fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log('[${service.id}] Used file input');
-            return { success: true, method: 'fileInput' };
-          }
-          
-          // Fallback: Drop auf Container
-          const dropZone = inputEl.closest('fieldset') || inputEl.closest('form') || inputEl.parentElement;
-          if (dropZone) {
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(file);
-            
-            const dropEvent = new DragEvent('drop', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer
-            });
-            dropZone.dispatchEvent(dropEvent);
-            console.log('[${service.id}] Used drop on container');
-            return { success: true, method: 'drop' };
-          }
-          
-          return { success: false, error: 'No upload method found for Claude' };
-        }
-        
-        // Für andere Editoren (Copilot, Gemini, Perplexity): Paste-Event
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        
-        const pasteEvent = new ClipboardEvent('paste', {
-          bubbles: true,
-          cancelable: true,
-          clipboardData: dataTransfer
-        });
-        
-        inputEl.dispatchEvent(pasteEvent);
-        console.log('[${service.id}] Paste event dispatched');
-        
-        return { success: true, method: 'paste' };
-        
-      } catch (e) {
-        console.error('[${service.id}] Image paste failed:', e);
-        return { success: false, error: e.message };
-      }
-    })();
-  `;
 }
 
 // Debug-Funktionen
@@ -858,19 +602,14 @@ window.debugSelectors = async (serviceId) => {
     return;
   }
   
-  const script = `
-    (function() {
-      const inputs = document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]');
-      return Array.from(inputs).map((el, i) => ({
-        index: i,
-        tag: el.tagName,
-        id: el.id,
-        class: el.className,
-        placeholder: el.placeholder || el.getAttribute('data-placeholder'),
-        ariaLabel: el.getAttribute('aria-label')
-      }));
-    })();
-  `;
+  const script = `(function() {
+    const inputs = document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]');
+    return Array.from(inputs).map((el, i) => ({
+      index: i, tag: el.tagName, id: el.id, class: el.className,
+      placeholder: el.placeholder || el.getAttribute('data-placeholder'),
+      ariaLabel: el.getAttribute('aria-label')
+    }));
+  })();`;
   
   const result = await webview.executeJavaScript(script);
   console.log(`[${serviceId}] Available inputs:`, result);
@@ -885,7 +624,6 @@ window.userSettings = userSettings;
 // RESPONSE READING & COMPARISON FEATURES
 // ============================================
 
-// Letzte Antwort eines Services auslesen
 async function getLastResponse(serviceId) {
   const service = config.services.find(s => s.id === serviceId);
   if (!service || !service.responseSelectors) {
@@ -896,86 +634,53 @@ async function getLastResponse(serviceId) {
   const webview = webviews[serviceId];
   if (!webview) return null;
   
-  const script = `
-    (function() {
-      const selectors = ${JSON.stringify(service.responseSelectors)};
-      
-      // Alle Response-Elemente finden
-      let allResponses = [];
-      for (const selector of selectors) {
-        try {
-          const elements = document.querySelectorAll(selector);
-          if (elements.length > 0) {
-            allResponses = Array.from(elements);
-            break;
-          }
-        } catch (e) {}
-      }
-      
-      if (allResponses.length === 0) {
-        return { success: false, error: 'No responses found' };
-      }
-      
-      // Letzte Antwort nehmen
-      const lastResponse = allResponses[allResponses.length - 1];
-      const text = lastResponse.innerText || lastResponse.textContent || '';
-      
-      return { 
-        success: true, 
-        text: text.trim(),
-        count: allResponses.length
-      };
-    })();
-  `;
+  const script = `(function() {
+    const selectors = ${JSON.stringify(service.responseSelectors)};
+    let allResponses = [];
+    for (const selector of selectors) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          allResponses = Array.from(elements);
+          break;
+        }
+      } catch (e) {}
+    }
+    if (allResponses.length === 0) return { success: false, error: 'No responses found' };
+    const lastResponse = allResponses[allResponses.length - 1];
+    return { success: true, text: (lastResponse.innerText || lastResponse.textContent || '').trim(), count: allResponses.length };
+  })();`;
   
   try {
-    const result = await webview.executeJavaScript(script);
-    console.log(`[${serviceId}] Response:`, result);
-    return result;
+    return await webview.executeJavaScript(script);
   } catch (e) {
     console.error(`[${serviceId}] Error getting response:`, e);
     return { success: false, error: e.message };
   }
 }
 
-// Alle Antworten der aktiven Services sammeln
 async function getAllResponses() {
   const responses = {};
-  
   for (const serviceId of userSettings.activeServices) {
     const result = await getLastResponse(serviceId);
     if (result?.success && result.text) {
       const service = config.services.find(s => s.id === serviceId);
-      responses[serviceId] = {
-        name: service?.name || serviceId,
-        text: result.text
-      };
+      responses[serviceId] = { name: service?.name || serviceId, text: result.text };
     }
   }
-  
   return responses;
 }
 
-// Antwort in Zwischenablage kopieren
 async function copyResponse(serviceId) {
   const result = await getLastResponse(serviceId);
-  
   if (!result?.success || !result.text) {
     alert(I18N.t('msgNoResponseFrom').replace('{service}', serviceId));
     return;
   }
   
   try {
-    // Electron clipboard über IPC
     await window.electronAPI.copyToClipboard(result.text);
-    
-    // Visuelles Feedback
-    const btn = document.querySelector(`.copy-response-btn[data-service="${serviceId}"]`);
-    if (btn) {
-      btn.textContent = '✅';
-      setTimeout(() => btn.textContent = '📋', 1000);
-    }
-    
+    setButtonFeedback(`.copy-response-btn[data-service="${serviceId}"]`, '✅', '📋');
     console.log(`[${serviceId}] Response copied (${result.text.length} chars)`);
   } catch (e) {
     console.error('Copy failed:', e);
@@ -983,48 +688,31 @@ async function copyResponse(serviceId) {
   }
 }
 
-// Kreuzvergleich: Andere Antworten in einen Service einfügen
 async function crossCompare(targetServiceId) {
   const responses = await getAllResponses();
-  
-  // Andere Services außer dem Ziel
-  const otherResponses = Object.entries(responses)
-    .filter(([id]) => id !== targetServiceId);
+  const otherResponses = Object.entries(responses).filter(([id]) => id !== targetServiceId);
   
   if (otherResponses.length === 0) {
     alert(I18N.t('msgNoResponse'));
     return;
   }
   
-  // Vergleichs-Prompt aus i18n
   let comparePrompt = I18N.t('crossComparePrompt');
-  
   otherResponses.forEach(([id, data]) => {
     comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
   
-  // In Ziel-Service einfügen
   const service = config.services.find(s => s.id === targetServiceId);
   if (!service) return;
   
-  const script = createInjectionScript(service, comparePrompt);
-  
   try {
-    await webviews[targetServiceId].executeJavaScript(script);
-    console.log(`[${targetServiceId}] Cross-compare prompt injected`);
-    
-    // Visuelles Feedback
-    const btn = document.querySelector(`.compare-btn[data-service="${targetServiceId}"]`);
-    if (btn) {
-      btn.textContent = '✅';
-      setTimeout(() => btn.textContent = '⚖️', 1000);
-    }
+    await webviews[targetServiceId].executeJavaScript(createInjectionScript(service, comparePrompt));
+    setButtonFeedback(`.compare-btn[data-service="${targetServiceId}"]`, '✅', '⚖️');
   } catch (e) {
     console.error(`[${targetServiceId}] Cross-compare failed:`, e);
   }
 }
 
-// Alle Services vergleichen lassen
 async function compareAll() {
   const responses = await getAllResponses();
   const responseList = Object.entries(responses);
@@ -1034,242 +722,132 @@ async function compareAll() {
     return;
   }
   
-  // Vergleichs-Prompt aus i18n
   let comparePrompt = I18N.t('comparePrompt');
-  
   responseList.forEach(([id, data]) => {
     comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
   
-  // In ALLE aktiven Services einfügen
   for (const serviceId of userSettings.activeServices) {
     const service = config.services.find(s => s.id === serviceId);
     if (!service) continue;
-    
-    const script = createInjectionScript(service, comparePrompt);
-    
     try {
-      await webviews[serviceId].executeJavaScript(script);
-      console.log(`[${serviceId}] Compare-all prompt injected`);
+      await webviews[serviceId].executeJavaScript(createInjectionScript(service, comparePrompt));
     } catch (e) {
       console.error(`[${serviceId}] Compare-all failed:`, e);
     }
   }
 }
 
-// Ja/Nein Abstimmung auswerten
+// Vote-Erkennungs-Strategien
+const voteStrategies = {
+  pattern: (text) => {
+    const start = text.substring(0, 200).toLowerCase();
+    const isJa = VotePatterns.jaPatterns.some(p => p.test(start));
+    const isNein = VotePatterns.neinPatterns.some(p => p.test(start));
+    if (isJa && !isNein) return 'ja';
+    if (isNein && !isJa) return 'nein';
+    return 'unklar';
+  },
+  
+  first: (text) => {
+    const start = text.substring(0, 150).toLowerCase();
+    const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes|jawohl|genau|absolut|definitiv)[\s\.,!\-–:;,\n\r]/i);
+    const neinMatch = start.match(/(?:^|[.!?]\s*)(nein|no|nicht|keineswegs|niemals)[\s\.,!\-–:;,\n\r]/i);
+    if (!jaMatch && !neinMatch) return 'unklar';
+    if (jaMatch && !neinMatch) return 'ja';
+    if (neinMatch && !jaMatch) return 'nein';
+    return jaMatch.index < neinMatch.index ? 'ja' : 'nein';
+  },
+  
+  count: (text) => {
+    const start = text.substring(0, 200).toLowerCase();
+    const jaCount = (start.match(/\b(ja|yes|jawohl)\b/gi) || []).length;
+    const neinCount = (start.match(/\b(nein|no|nicht)\b/gi) || []).length;
+    if (jaCount === 0 && neinCount === 0) return 'unklar';
+    if (jaCount > neinCount) return 'ja';
+    if (neinCount > jaCount) return 'nein';
+    return 'unklar';
+  },
+  
+  weighted: (text) => {
+    const start = text.substring(0, 250).toLowerCase();
+    let jaScore = 0, neinScore = 0;
+    
+    const getWeight = (pos) => {
+      const before = text.substring(Math.max(0, pos - 5), pos);
+      const isAfterSentence = /[.!?\n]\s*$/.test(before) || pos < 3;
+      if (isAfterSentence && pos < 50) return 10;
+      if (pos < 50) return 5;
+      if (pos < 150) return 2;
+      return 1;
+    };
+    
+    const jaWordsRegex = new RegExp('\\b(' + VotePatterns.jaWords.join('|') + ')\\b', 'gi');
+    const neinWordsRegex = new RegExp('\\b(' + VotePatterns.neinWords.join('|') + ')\\b', 'gi');
+    
+    let match;
+    while ((match = jaWordsRegex.exec(start)) !== null) jaScore += getWeight(match.index);
+    while ((match = neinWordsRegex.exec(start)) !== null) neinScore += getWeight(match.index);
+    
+    if (jaScore === 0 && neinScore === 0) return 'unklar';
+    if (jaScore >= 5 && jaScore > neinScore) return 'ja';
+    if (neinScore >= 5 && neinScore > jaScore) return 'nein';
+    return 'unklar';
+  }
+};
+
+function detectVote(text, strategy) {
+  const cleanedText = VotePatterns.cleanText(text);
+  const lowerText = cleanedText.toLowerCase();
+  
+  if (VotePatterns.isMeta(lowerText) || VotePatterns.isUnclear(lowerText)) {
+    return 'unklar';
+  }
+  
+  if (strategy === 'weighted') {
+    const patternResult = voteStrategies.pattern(lowerText);
+    if (patternResult !== 'unklar') return patternResult;
+    return voteStrategies.weighted(lowerText);
+  }
+  
+  return voteStrategies[strategy]?.(lowerText) || 'unklar';
+}
+
 async function evaluateYesNo() {
   const responses = await getAllResponses();
   const votes = { ja: [], nein: [], unklar: [] };
   const strategy = config.voteStrategy || 'weighted';
   
   for (const [serviceId, data] of Object.entries(responses)) {
-    const text = data.text;
-    const voteEntry = { id: serviceId, name: data.name };
-    
-    let result = detectVote(text, strategy);
-    
-    if (result === 'ja') {
-      votes.ja.push(voteEntry);
-    } else if (result === 'nein') {
-      votes.nein.push(voteEntry);
-    } else {
-      votes.unklar.push(voteEntry);
-    }
+    const result = detectVote(data.text, strategy);
+    votes[result].push({ id: serviceId, name: data.name });
   }
   
   return votes;
 }
 
-// Vote-Erkennung mit verschiedenen Strategien
-function detectVote(text, strategy) {
-  // Text vorbereiten (Emojis/Symbole am Anfang entfernen)
-  const cleanedText = VotePatterns.cleanText(text);
-  const lowerText = cleanedText.toLowerCase();
-  
-  // ZUERST: Meta-Aussagen erkennen (Rankings, Vergleiche)
-  if (VotePatterns.isMeta(lowerText)) {
-    return 'unklar';
-  }
-  
-  // DANN: Rückfragen erkennen
-  if (VotePatterns.isUnclear(lowerText)) {
-    return 'unklar';
-  }
-  
-  // Strategie 1: Feste Muster
-  if (strategy === 'pattern') {
-    return detectByPattern(lowerText);
-  }
-  
-  // Strategie 2: Erstes Ja/Nein gewinnt
-  if (strategy === 'first') {
-    return detectByFirst(lowerText);
-  }
-  
-  // Strategie 3: Zählen - Mehrheit gewinnt
-  if (strategy === 'count') {
-    return detectByCount(lowerText);
-  }
-  
-  // Strategie 4: Gewichtet (Default)
-  if (strategy === 'weighted') {
-    // Erst Muster probieren
-    const patternResult = detectByPattern(lowerText);
-    if (patternResult !== 'unklar') {
-      return patternResult;
-    }
-    // Dann gewichtete Analyse
-    return detectByWeighted(lowerText);
-  }
-  
-  return 'unklar';
-}
-
-// Erkennt Meta-Aussagen über Ja/Nein (keine echten Antworten)
-function isMetaStatement(text) {
-  const start = text.substring(0, 300).toLowerCase();
-  
-  // Einfache Patterns die auf Meta-Aussagen hinweisen
-  const metaPatterns = [
-    /„ja"\s*(oder|und|\/)\s*„nein"/i,
-    /"ja"\s*(oder|und|\/)\s*"nein"/i,
-    /\bja\s*(oder|und)\s*nein\b/i,
-    /\bja\s*\/\s*nein\b/i,
-    /\byes\s*(or|and|\/)\s*no\b/i,
-  ];
-  
-  return metaPatterns.some(pattern => pattern.test(start));
-}
-
-// Strategie: Feste Muster aus VotePatterns
-function detectByPattern(text) {
-  const start = text.substring(0, 200).toLowerCase();
-  
-  // Patterns aus externer Datei nutzen
-  const isJa = VotePatterns.jaPatterns.some(p => p.test(start));
-  const isNein = VotePatterns.neinPatterns.some(p => p.test(start));
-  
-  if (isJa && !isNein) return 'ja';
-  if (isNein && !isJa) return 'nein';
-  return 'unklar';
-}
-
-// Strategie: Erstes Wort gewinnt
-function detectByFirst(text) {
-  const start = text.substring(0, 150).toLowerCase();
-  
-  // Suche nach Ja/Nein am Satzanfang
-  const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes|jawohl|genau|absolut|definitiv)[\s\.,!\-–:;,\n\r]/i);
-  const neinMatch = start.match(/(?:^|[.!?]\s*)(nein|no|nicht|keineswegs|niemals)[\s\.,!\-–:;,\n\r]/i);
-  
-  if (!jaMatch && !neinMatch) return 'unklar';
-  if (jaMatch && !neinMatch) return 'ja';
-  if (neinMatch && !jaMatch) return 'nein';
-  
-  // Beide gefunden - welches kommt zuerst?
-  if (jaMatch.index < neinMatch.index) return 'ja';
-  if (neinMatch.index < jaMatch.index) return 'nein';
-  return 'unklar';
-}
-
-// Strategie: Zählen
-function detectByCount(text) {
-  const start = text.substring(0, 200).toLowerCase();
-  
-  const jaMatches = start.match(/\b(ja|yes|jawohl)\b/gi) || [];
-  const neinMatches = start.match(/\b(nein|no|nicht)\b/gi) || [];
-  
-  const jaCount = jaMatches.length;
-  const neinCount = neinMatches.length;
-  
-  if (jaCount === 0 && neinCount === 0) return 'unklar';
-  if (jaCount > neinCount) return 'ja';
-  if (neinCount > jaCount) return 'nein';
-  return 'unklar';
-}
-
-// Strategie: Gewichtet
-function detectByWeighted(text) {
-  const start = text.substring(0, 250).toLowerCase();
-  
-  let jaScore = 0;
-  let neinScore = 0;
-  
-  // Wörter aus VotePatterns
-  const jaWordsRegex = new RegExp('\\b(' + VotePatterns.jaWords.join('|') + ')\\b', 'gi');
-  const neinWordsRegex = new RegExp('\\b(' + VotePatterns.neinWords.join('|') + ')\\b', 'gi');
-  
-  let match;
-  
-  // Ja-Wörter gewichten
-  while ((match = jaWordsRegex.exec(start)) !== null) {
-    jaScore += getPositionWeight(match.index, start);
-  }
-  
-  // Nein-Wörter gewichten
-  while ((match = neinWordsRegex.exec(start)) !== null) {
-    neinScore += getPositionWeight(match.index, start);
-  }
-  
-  // Mindestens 5 Punkte für klares Ergebnis
-  if (jaScore === 0 && neinScore === 0) return 'unklar';
-  if (jaScore >= 5 && jaScore > neinScore) return 'ja';
-  if (neinScore >= 5 && neinScore > jaScore) return 'nein';
-  
-  return 'unklar';
-}
-
-// Gewicht basierend auf Position
-function getPositionWeight(position, text) {
-  const beforeText = text.substring(Math.max(0, position - 5), position);
-  const isAfterSentenceEnd = /[.!?\n]\s*$/.test(beforeText) || position < 3;
-  
-  if (isAfterSentenceEnd && position < 50) {
-    return 10; // Satzanfang in den ersten 50 Zeichen
-  }
-  if (position < 50) {
-    return 5; // Erste 50 Zeichen
-  }
-  if (position < 150) {
-    return 2; // Zeichen 50-150
-  }
-  return 1; // Rest
-}
-
-// Globale Variable für letztes Vote-Ergebnis
 let lastVotes = null;
 
-// Vote zurücksetzen
 function resetVotes() {
   lastVotes = null;
   const voteDisplay = document.getElementById('vote-display');
-  if (voteDisplay) {
-    voteDisplay.innerHTML = '';
-  }
-  // Overlays entfernen
+  if (voteDisplay) voteDisplay.innerHTML = '';
   document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
 }
 
-// Overlays mit Fade-Out entfernen
 function fadeOutOverlays() {
-  const overlays = document.querySelectorAll('.vote-overlay');
-  overlays.forEach(overlay => {
+  document.querySelectorAll('.vote-overlay').forEach(overlay => {
     overlay.classList.add('fade-out');
     setTimeout(() => overlay.remove(), 500);
   });
 }
 
-// Overlays ein-/ausblenden
 function showVoteOverlays(show) {
-  if (!lastVotes) return;
+  if (!lastVotes || !show) {
+    document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
+    return;
+  }
   
-  // Alle Overlays entfernen
-  document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
-  
-  if (!show) return;
-  
-  // Overlays für jeden Service erstellen
   const addOverlay = (entries, colorClass) => {
     entries.forEach(entry => {
       const container = document.querySelector(`.webview-container[data-service="${entry.id}"]`);
@@ -1286,13 +864,10 @@ function showVoteOverlays(show) {
   addOverlay(lastVotes.unklar, 'vote-overlay-unclear');
 }
 
-// Vote-Anzeige aktualisieren mit Hover-Overlays
 async function updateVoteDisplay() {
   const votes = await evaluateYesNo();
-  lastVotes = votes; // Global speichern für Overlay
-  
+  lastVotes = votes;
   const voteDisplay = document.getElementById('vote-display');
-  
   if (!voteDisplay) return;
   
   const total = votes.ja.length + votes.nein.length + votes.unklar.length;
@@ -1301,58 +876,54 @@ async function updateVoteDisplay() {
     return;
   }
   
-  // Namen für Tooltips
-  const jaNames = votes.ja.map(v => v.name).join(', ');
-  const neinNames = votes.nein.map(v => v.name).join(', ');
-  const unklarNames = votes.unklar.map(v => v.name).join(', ');
+  const names = {
+    ja: votes.ja.map(v => v.name).join(', '),
+    nein: votes.nein.map(v => v.name).join(', '),
+    unklar: votes.unklar.map(v => v.name).join(', ')
+  };
   
-  let html = '<div class="vote-container">';
+  let resultClass = 'vote-result-unclear';
+  let resultText = I18N.t('voteUnclearResult');
   
-  // Kompakte Zahlen-Anzeige
-  html += '<div class="vote-counts">';
-  html += `<span class="vote-count vote-yes" title="${jaNames}">${I18N.t('voteYes')}: ${votes.ja.length}</span>`;
-  html += `<span class="vote-count vote-no" title="${neinNames}">${I18N.t('voteNo')}: ${votes.nein.length}</span>`;
-  if (votes.unklar.length > 0) {
-    html += `<span class="vote-count vote-unclear" title="${unklarNames}">?: ${votes.unklar.length}</span>`;
-  }
-  html += '</div>';
-  
-  // Mehrheit bestimmen mit farbiger Anzeige
-  html += '<div class="vote-result-container">';
   if (votes.ja.length > votes.nein.length) {
-    html += `<span class="vote-result vote-result-yes">${I18N.t('voteMajorityYes')}</span>`;
+    resultClass = 'vote-result-yes';
+    resultText = I18N.t('voteMajorityYes');
   } else if (votes.nein.length > votes.ja.length) {
-    html += `<span class="vote-result vote-result-no">${I18N.t('voteMajorityNo')}</span>`;
+    resultClass = 'vote-result-no';
+    resultText = I18N.t('voteMajorityNo');
   } else if (votes.ja.length === votes.nein.length && votes.ja.length > 0) {
-    html += `<span class="vote-result vote-result-tie">${I18N.t('voteTie')}</span>`;
-  } else {
-    html += `<span class="vote-result vote-result-unclear">${I18N.t('voteUnclearResult')}</span>`;
+    resultClass = 'vote-result-tie';
+    resultText = I18N.t('voteTie');
   }
-  html += '</div>';
   
-  html += '</div>';
+  voteDisplay.innerHTML = `
+    <div class="vote-container">
+      <div class="vote-counts">
+        <span class="vote-count vote-yes" title="${names.ja}">${I18N.t('voteYes')}: ${votes.ja.length}</span>
+        <span class="vote-count vote-no" title="${names.nein}">${I18N.t('voteNo')}: ${votes.nein.length}</span>
+        ${votes.unklar.length > 0 ? `<span class="vote-count vote-unclear" title="${names.unklar}">?: ${votes.unklar.length}</span>` : ''}
+      </div>
+      <div class="vote-result-container">
+        <span class="vote-result ${resultClass}">${resultText}</span>
+      </div>
+    </div>
+  `;
   
-  voteDisplay.innerHTML = html;
-  
-  // Hover-Events für Overlay
   voteDisplay.addEventListener('mouseenter', () => showVoteOverlays(true));
   voteDisplay.addEventListener('mouseleave', () => showVoteOverlays(false));
 }
 
-// === MUTE FUNKTIONEN ===
-
+// MUTE FUNKTIONEN
 function toggleMute(serviceId) {
   const btn = document.querySelector(`.mute-btn[data-service="${serviceId}"]`);
   const container = document.getElementById(`${serviceId}-container`);
   
   if (mutedServices.has(serviceId)) {
-    // Unmute
     mutedServices.delete(serviceId);
     btn.textContent = '🔔';
     btn.title = 'Nächste Nachricht überspringen';
     container.classList.remove('muted');
   } else {
-    // Mute
     mutedServices.add(serviceId);
     btn.textContent = '🔕';
     btn.title = 'Wird übersprungen (klicken zum Aufheben)';
@@ -1361,81 +932,56 @@ function toggleMute(serviceId) {
 }
 
 function clearMutedServices() {
-  // Nach dem Senden alle Mutes aufheben
   mutedServices.forEach(serviceId => {
     const btn = document.querySelector(`.mute-btn[data-service="${serviceId}"]`);
     const container = document.getElementById(`${serviceId}-container`);
-    if (btn) {
-      btn.textContent = '🔔';
-      btn.title = 'Nächste Nachricht überspringen';
-    }
-    if (container) {
-      container.classList.remove('muted');
-    }
+    if (btn) btn.textContent = '🔔';
+    if (container) container.classList.remove('muted');
   });
   mutedServices.clear();
 }
 
-// === FOCUS FUNKTIONEN ===
-
+// FOCUS FUNKTIONEN
 function toggleFocus(serviceId) {
-  console.log('toggleFocus called:', serviceId, 'current focused:', focusedService);
   if (focusedService === serviceId) {
-    // Bereits fokussiert -> beenden
     exitFocus();
   } else {
-    // Neuen Service fokussieren
     enterFocus(serviceId);
   }
 }
 
 function enterFocus(serviceId) {
-  console.log('enterFocus:', serviceId);
-  // Vorherigen Zustand speichern
-  previousLayout = {
-    activeServices: [...userSettings.activeServices],
-    focusedService: focusedService
-  };
-  
+  previousLayout = { activeServices: [...userSettings.activeServices], focusedService };
   focusedService = serviceId;
   
-  // Alle Container verstecken außer dem fokussierten
   userSettings.activeServices.forEach(id => {
     const container = document.getElementById(`${id}-container`);
-    console.log('Processing container:', id, container ? 'found' : 'NOT FOUND');
-    if (container) {
-      if (id === serviceId) {
-        container.classList.remove('hidden-by-focus');
-        container.classList.add('is-focused');
-        // Focus-Button zu Zurück-Button ändern
-        const focusBtn = container.querySelector('.focus-btn');
-        if (focusBtn) {
-          focusBtn.textContent = '↩️';
-          focusBtn.title = 'Zurück zur Übersicht';
-          focusBtn.classList.add('unfocus-btn');
-        }
-      } else {
-        container.classList.add('hidden-by-focus');
+    if (!container) return;
+    
+    if (id === serviceId) {
+      container.classList.remove('hidden-by-focus');
+      container.classList.add('is-focused');
+      const focusBtn = container.querySelector('.focus-btn');
+      if (focusBtn) {
+        focusBtn.textContent = '↩️';
+        focusBtn.title = 'Zurück zur Übersicht';
+        focusBtn.classList.add('unfocus-btn');
       }
+    } else {
+      container.classList.add('hidden-by-focus');
     }
   });
   
-  // Grid auf 1 Spalte/Zeile setzen
   webviewGrid.classList.add('focus-mode');
-  console.log('Focus mode enabled');
 }
 
 function exitFocus() {
-  console.log('exitFocus called, focusedService:', focusedService);
   if (!focusedService) return;
   
-  // Alle Container wieder anzeigen
   userSettings.activeServices.forEach(id => {
     const container = document.getElementById(`${id}-container`);
     if (container) {
-      container.classList.remove('hidden-by-focus');
-      container.classList.remove('is-focused');
-      // Zurück-Button zu Focus-Button ändern
+      container.classList.remove('hidden-by-focus', 'is-focused');
       const focusBtn = container.querySelector('.focus-btn');
       if (focusBtn) {
         focusBtn.textContent = '🔍';
@@ -1447,16 +993,10 @@ function exitFocus() {
   
   focusedService = null;
   previousLayout = null;
-  
-  // Grid-Modus zurücksetzen
   webviewGrid.classList.remove('focus-mode');
-  console.log('Focus mode disabled');
 }
 
-// ============================================
-// PROMPT HISTORY (↑/↓ Tasten)
-// ============================================
-
+// PROMPT HISTORY
 async function loadPromptHistory() {
   try {
     const data = await window.electronAPI.readFile('prompt-history.json');
@@ -1465,7 +1005,6 @@ async function loadPromptHistory() {
       console.log('Prompt history loaded:', promptHistory.length, 'entries');
     }
   } catch (e) {
-    console.log('No prompt history found, starting fresh');
     promptHistory = [];
   }
 }
@@ -1479,74 +1018,51 @@ async function savePromptHistory() {
 }
 
 function addToPromptHistory(prompt) {
-  // Leere Prompts ignorieren
   if (!prompt || !prompt.trim()) return;
-  
-  // Duplikate vermeiden (letzter Eintrag)
-  if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === prompt) {
-    return;
-  }
+  if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === prompt) return;
   
   promptHistory.push(prompt);
-  
-  // Max-Größe einhalten
   if (promptHistory.length > MAX_PROMPT_HISTORY) {
     promptHistory = promptHistory.slice(-MAX_PROMPT_HISTORY);
   }
   
-  // Index zurücksetzen
   promptHistoryIndex = -1;
   currentPromptBackup = '';
-  
   savePromptHistory();
 }
 
 function navigatePromptHistory(direction) {
   if (promptHistory.length === 0) return;
   
-  // Beim ersten Mal: aktuellen Input sichern
   if (promptHistoryIndex === -1 && direction === -1) {
     currentPromptBackup = promptInput.value;
   }
   
-  // Neuen Index berechnen
   const newIndex = promptHistoryIndex + direction;
-  
-  // Zurück zum aktuellen Input
-  if (newIndex < -1) return;
-  if (newIndex >= promptHistory.length) return;
+  if (newIndex < -1 || newIndex >= promptHistory.length) return;
   
   if (newIndex === -1) {
-    // Zurück zum gesicherten Input
     promptInput.value = currentPromptBackup;
     promptHistoryIndex = -1;
   } else {
-    // History-Eintrag laden (von hinten nach vorne)
     const historyIndex = promptHistory.length - 1 - newIndex;
     promptInput.value = promptHistory[historyIndex];
     promptHistoryIndex = newIndex;
   }
   
-  // Cursor ans Ende setzen
-  promptInput.selectionStart = promptInput.value.length;
-  promptInput.selectionEnd = promptInput.value.length;
+  promptInput.selectionStart = promptInput.selectionEnd = promptInput.value.length;
 }
 
-// ============================================
-// SESSION HISTORY (◀/▶ Buttons)
-// ============================================
-
+// SESSION HISTORY
 async function loadSessionHistory() {
   try {
     const data = await window.electronAPI.readFile('session-history.json');
     if (data) {
       sessionHistory = JSON.parse(data);
-      // Index auf "aktuelle Position" setzen (nach der letzten gespeicherten)
       sessionHistoryIndex = sessionHistory.length;
       console.log('Session history loaded:', sessionHistory.length, 'sessions');
     }
   } catch (e) {
-    console.log('No session history found, starting fresh');
     sessionHistory = [];
     sessionHistoryIndex = 0;
   }
@@ -1563,107 +1079,66 @@ async function saveSessionHistory() {
 
 function getCurrentSessionUrls() {
   const urls = {};
-  
   for (const [serviceId, webview] of Object.entries(webviews)) {
     try {
       const url = webview.getURL();
       if (url && !url.startsWith('about:')) {
         urls[serviceId] = url;
       }
-    } catch (e) {
-      // Webview noch nicht bereit
-    }
+    } catch (e) {}
   }
-  
   return urls;
 }
 
 async function saveCurrentSession() {
   const urls = getCurrentSessionUrls();
-  
-  // Nur speichern wenn mindestens eine URL vorhanden
   if (Object.keys(urls).length === 0) return;
   
-  // Prüfen ob sich etwas geändert hat
   if (sessionHistory.length > 0) {
-    const lastSession = sessionHistory[sessionHistory.length - 1];
-    const lastUrls = lastSession.urls;
-    
-    // Vergleichen
+    const lastUrls = sessionHistory[sessionHistory.length - 1].urls;
     const hasChanged = Object.keys(urls).some(id => urls[id] !== lastUrls[id]) ||
                        Object.keys(lastUrls).some(id => lastUrls[id] !== urls[id]);
-    
-    if (!hasChanged) {
-      console.log('Session unchanged, not saving');
-      return;
-    }
+    if (!hasChanged) return;
   }
   
-  const session = {
-    timestamp: new Date().toISOString(),
-    urls: urls
-  };
-  
-  // Wenn wir in der Historie zurückgeblättert haben, alles danach löschen
   if (sessionHistoryIndex < sessionHistory.length) {
     sessionHistory = sessionHistory.slice(0, sessionHistoryIndex);
   }
   
-  sessionHistory.push(session);
-  
-  // Max-Größe einhalten
+  sessionHistory.push({ timestamp: new Date().toISOString(), urls });
   if (sessionHistory.length > MAX_SESSION_HISTORY) {
     sessionHistory = sessionHistory.slice(-MAX_SESSION_HISTORY);
   }
   
   sessionHistoryIndex = sessionHistory.length;
-  
   await saveSessionHistory();
-  console.log('Session saved:', Object.keys(urls).length, 'services');
 }
 
 function navigateSessionHistory(direction) {
   const newIndex = sessionHistoryIndex + direction;
-  
-  // Grenzen prüfen
   if (newIndex < 0 || newIndex > sessionHistory.length) return;
   
-  // Aktuelle Session speichern wenn wir von "aktuell" wegnavigieren
   if (sessionHistoryIndex === sessionHistory.length && direction === -1) {
-    // Aktuelle URLs als temporäre Session speichern
     const currentUrls = getCurrentSessionUrls();
     if (Object.keys(currentUrls).length > 0) {
-      sessionHistory.push({
-        timestamp: new Date().toISOString(),
-        urls: currentUrls,
-        current: true // Markierung für "aktuelle" Session
-      });
+      sessionHistory.push({ timestamp: new Date().toISOString(), urls: currentUrls, current: true });
       saveSessionHistory();
     }
   }
   
   sessionHistoryIndex = newIndex;
-  
-  if (newIndex === sessionHistory.length) {
-    // Zur "aktuellen" Session - nichts laden, einfach zurücksetzen
-    console.log('At current session');
-  } else {
-    // Session laden
-    const session = sessionHistory[newIndex];
-    loadSession(session);
+  if (newIndex < sessionHistory.length) {
+    loadSession(sessionHistory[newIndex]);
   }
   
   updateSessionNavButtons();
 }
 
 function loadSession(session) {
-  console.log('Loading session from:', session.timestamp);
-  
   for (const [serviceId, url] of Object.entries(session.urls)) {
     if (webviews[serviceId]) {
       try {
         webviews[serviceId].loadURL(url);
-        console.log('Loaded URL for', serviceId, ':', url.substring(0, 50) + '...');
       } catch (e) {
         console.error('Error loading URL for', serviceId, ':', e);
       }
@@ -1690,77 +1165,51 @@ function updateSessionNavButtons() {
   }
 }
 
-// ============================================
-// INTERNATIONALISIERUNG (i18n)
-// ============================================
-
+// INTERNATIONALISIERUNG
 function updateUILanguage() {
-  // Prompt-Eingabe Placeholder
   promptInput.placeholder = I18N.t('promptPlaceholder');
   
-  // Toolbar Buttons
-  const pasteBtn = document.getElementById('paste-image-button');
-  if (pasteBtn) pasteBtn.title = I18N.t('tooltipPasteImage');
+  const buttons = {
+    'paste-image-button': I18N.t('tooltipPasteImage'),
+    'send-button': I18N.t('tooltipSend'),
+    'vote-check-btn': I18N.t('tooltipVote'),
+    'compare-all-btn': I18N.t('tooltipCompareAll'),
+    'session-back-btn': I18N.t('tooltipSessionBack'),
+    'session-forward-btn': I18N.t('tooltipSessionForward'),
+    'refresh-all': I18N.t('tooltipRefresh'),
+    'language-btn': I18N.t('tooltipLanguage')
+  };
   
-  const sendBtn = document.getElementById('send-button');
-  if (sendBtn) sendBtn.title = I18N.t('tooltipSend');
+  Object.entries(buttons).forEach(([id, title]) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.title = title;
+  });
   
-  // Layout Buttons
+  if (document.getElementById('vote-check-btn')) {
+    document.getElementById('vote-check-btn').textContent = I18N.t('btnVote');
+  }
+  if (document.getElementById('compare-all-btn')) {
+    document.getElementById('compare-all-btn').textContent = I18N.t('btnCompare');
+  }
+  if (document.getElementById('language-btn')) {
+    document.getElementById('language-btn').textContent = I18N.getCurrentFlag();
+  }
+  
   document.querySelectorAll('.layout-btn').forEach(btn => {
     const layout = btn.dataset.layout;
-    if (layout === 'grid') btn.title = I18N.t('tooltipGrid');
-    if (layout === 'horizontal') btn.title = I18N.t('tooltipHorizontal');
-    if (layout === 'vertical') btn.title = I18N.t('tooltipVertical');
+    const titles = { grid: 'tooltipGrid', horizontal: 'tooltipHorizontal', vertical: 'tooltipVertical' };
+    if (titles[layout]) btn.title = I18N.t(titles[layout]);
   });
   
-  // Vote/Compare Buttons
-  const voteBtn = document.getElementById('vote-check-btn');
-  if (voteBtn) {
-    voteBtn.title = I18N.t('tooltipVote');
-    voteBtn.textContent = I18N.t('btnVote');
-  }
-  
-  const compareBtn = document.getElementById('compare-all-btn');
-  if (compareBtn) {
-    compareBtn.title = I18N.t('tooltipCompareAll');
-    compareBtn.textContent = I18N.t('btnCompare');
-  }
-  
-  // Session Navigation
-  const sessionBackBtn = document.getElementById('session-back-btn');
-  if (sessionBackBtn) sessionBackBtn.title = I18N.t('tooltipSessionBack');
-  
-  const sessionForwardBtn = document.getElementById('session-forward-btn');
-  if (sessionForwardBtn) sessionForwardBtn.title = I18N.t('tooltipSessionForward');
-  
-  // Language Button (Flagge aktualisieren)
-  const langBtn = document.getElementById('language-btn');
-  if (langBtn) {
-    langBtn.textContent = I18N.getCurrentFlag();
-    langBtn.title = I18N.t('tooltipLanguage');
-  }
-  
-  // Refresh Button
-  const refreshBtn = document.getElementById('refresh-all');
-  if (refreshBtn) refreshBtn.title = I18N.t('tooltipRefresh');
-  
-  // Alle Elemente mit data-i18n-title aktualisieren
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
-    const key = el.dataset.i18nTitle;
-    el.title = I18N.t(key);
+    el.title = I18N.t(el.dataset.i18nTitle);
   });
   
-  // Session-Buttons aktualisieren
   updateSessionNavButtons();
-  
-  console.log('UI language updated to:', I18N.currentLang);
 }
 
 function reloadWebviewsWithLanguage() {
-  // Sprache im Main-Process setzen (für Accept-Language Header)
   window.electronAPI.setLanguage(I18N.currentLang);
-  
-  // Webviews neu laden damit neue Sprache wirkt
   Object.values(webviews).forEach(webview => {
     try {
       webview.reload();
@@ -1768,8 +1217,6 @@ function reloadWebviewsWithLanguage() {
       console.error('Error reloading webview:', e);
     }
   });
-  
-  console.log('Webviews reloading with language:', I18N.currentLang);
 }
 
 // Expose for debugging
@@ -1782,8 +1229,5 @@ window.crossCompare = crossCompare;
 window.compareAll = compareAll;
 window.evaluateYesNo = evaluateYesNo;
 
-// Focus und Start
 promptInput.focus();
 init();
-
-console.log('LLM MultiChat initializing...');
