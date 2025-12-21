@@ -25,6 +25,12 @@ const refreshAllButton = document.getElementById('refresh-all');
 const statusBar = document.getElementById('status-bar');
 const webviewGrid = document.getElementById('webview-grid');
 
+console.log('=== DEBUG: DOM Elements ===');
+console.log('promptInput:', promptInput);
+console.log('sendButton:', sendButton);
+console.log('statusBar:', statusBar);
+console.log('webviewGrid:', webviewGrid);
+
 // Helper: Button-Feedback-Pattern
 function setButtonFeedback(selector, emoji, original, delay = 1000) {
   const btn = document.querySelector(selector);
@@ -66,18 +72,22 @@ const insertTextFn = (serviceId, editorType) => `async function insertText(eleme
   }
   
   // Editor-spezifische Behandlung
-  const isQuill = ${editorType} === 'quill' || element.classList.contains('ql-editor');
-  const isProseMirror = ${editorType} === 'prosemirror' || element.classList.contains('ProseMirror');
-  const isLexical = ${editorType} === 'lexical' || element.hasAttribute('data-lexical-editor');
+  const editorType = '${editorType}';
+  const isQuill = editorType === 'quill' || element.classList.contains('ql-editor');
+  const isProseMirror = editorType === 'prosemirror' || element.classList.contains('ProseMirror');
+  const isLexical = editorType === 'lexical' || element.hasAttribute('data-lexical-editor');
   
   if (isQuill || isProseMirror || isLexical || element.isContentEditable) {
-    ${isQuill ? `console.log('[${serviceId}] Using Quill insertion');` : ''}
-    ${isProseMirror ? `console.log('[${serviceId}] Using ProseMirror insertion');
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    selection.removeAllRanges();
-    selection.addRange(range);` : 'document.execCommand(\'selectAll\', false, null);'}
+    if (isProseMirror) {
+      console.log('[${serviceId}] Using ProseMirror insertion');
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      document.execCommand('selectAll', false, null);
+    }
     document.execCommand('delete', false, null);
     ${wait(50)}
     document.execCommand('insertText', false, text);
@@ -90,9 +100,15 @@ const insertTextFn = (serviceId, editorType) => `async function insertText(eleme
 
 // Initialisierung
 async function init() {
+  console.log('=== DEBUG: init() started ===');
   try {
+    console.log('DEBUG: Loading config...');
     config = await window.electronAPI.getConfig();
+    console.log('DEBUG: Config loaded:', config);
+    
+    console.log('DEBUG: Loading user settings...');
     userSettings = await window.electronAPI.getUserSettings();
+    console.log('DEBUG: User settings loaded:', userSettings);
     
     console.log('Config loaded:', config.services.length, 'services');
     
@@ -103,13 +119,19 @@ async function init() {
     await loadPromptHistory();
     await loadSessionHistory();
     
+    console.log('DEBUG: Building UI...');
     buildStatusBar();
     buildWebViews();
     applyLayout(userSettings.layout);
+    
+    console.log('DEBUG: Setting up event listeners...');
     setupEventListeners();
+    console.log('DEBUG: Event listeners set up!');
+    
     updateUILanguage();
     updateSessionNavButtons();
     
+    console.log('=== DEBUG: init() completed ===');
   } catch (e) {
     console.error('Error initializing:', e);
     webviewGrid.innerHTML = `<div id="loading-message">${I18N.t('statusError')}</div>`;
@@ -292,9 +314,15 @@ function createInjectionScript(service, text) {
 }
 
 async function sendToAll() {
+  console.log('=== DEBUG: sendToAll() called! ===');
   let text = promptInput.value.trim() || '.';
+  console.log('DEBUG: text =', text);
+  console.log('DEBUG: userSettings.activeServices =', userSettings.activeServices);
+  console.log('DEBUG: mutedServices =', [...mutedServices]);
   
   const activeNonMuted = userSettings.activeServices.filter(id => !mutedServices.has(id));
+  console.log('DEBUG: activeNonMuted =', activeNonMuted);
+  
   if (activeNonMuted.length === 0) {
     alert(I18N.t('msgNoActiveService'));
     return;
@@ -483,11 +511,18 @@ async function pasteImageToAll() {
 
 // Event Listeners
 function setupEventListeners() {
-  sendButton.addEventListener('click', sendToAll);
+  console.log('=== DEBUG: setupEventListeners() ===');
+  console.log('DEBUG: sendButton =', sendButton);
+  
+  sendButton.addEventListener('click', () => {
+    console.log('DEBUG: Send button clicked!');
+    sendToAll();
+  });
   pasteImageButton.addEventListener('click', pasteImageToAll);
   
   promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.ctrlKey) {
+      console.log('DEBUG: Ctrl+Enter pressed!');
       e.preventDefault();
       sendToAll();
     }
