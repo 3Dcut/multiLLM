@@ -15,7 +15,21 @@ const languageHeaders = {
 // Pfade zu den Config-Dateien (relativ zum Projekt-Root)
 const rootDir = path.join(__dirname, '..', '..');
 const configPath = path.join(rootDir, 'config', 'config.json');
+const configTemplatePath = path.join(rootDir, 'config', 'config.json.template');
 const userSettingsPath = path.join(rootDir, 'config', 'user-settings.json');
+const userSettingsTemplatePath = path.join(rootDir, 'config', 'user-settings.json.template');
+
+// Sicherstellen dass Config-Dateien existieren (aus Templates kopieren)
+function ensureConfigFiles() {
+  if (!fs.existsSync(configPath) && fs.existsSync(configTemplatePath)) {
+    console.log('Creating config.json from template...');
+    fs.copyFileSync(configTemplatePath, configPath);
+  }
+  if (!fs.existsSync(userSettingsPath) && fs.existsSync(userSettingsTemplatePath)) {
+    console.log('Creating user-settings.json from template...');
+    fs.copyFileSync(userSettingsTemplatePath, userSettingsPath);
+  }
+}
 
 // Configs laden
 function loadConfig() {
@@ -173,7 +187,10 @@ ipcMain.handle('set-language', (event, lang) => {
   return false;
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  ensureConfigFiles();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
