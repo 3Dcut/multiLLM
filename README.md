@@ -4,7 +4,7 @@ Eine Electron-App zum parallelen Abfragen mehrerer LLM-Dienste.
 
 ## Features
 
-- **Dynamische Konfiguration:** Services über `config/config.json` hinzufügen/entfernen
+- **Dynamische Konfiguration:** Services über `software/config/config.json` hinzufügen/entfernen
 - **Flexible Layouts:** Raster, Horizontal oder Vertikal
 - **Persistente Einstellungen:** Aktive Services und Layout werden gespeichert
 - **Toggle-Switches:** Services ein-/ausschalten ohne Neustart
@@ -16,15 +16,15 @@ Eine Electron-App zum parallelen Abfragen mehrerer LLM-Dienste.
 ## Installation
 
 ```bash
-cd app
+cd software/app
 npm install
 ```
 
 ## Starten
 
 - **Mit GUI:** Doppelklick auf `Start.vbs` (ohne CMD-Fenster)
-- **Mit CMD:** `cd app && npm start`
-- **Debug-Modus:** `scripts/debug-console.bat` oder `cd app && npm start -- --dev`
+- **Mit CMD:** `cd software/app && npm start`
+- **Debug-Modus:** `software/scripts/debug-console.bat` oder `cd software/app && npm start -- --dev`
 
 ## Projektstruktur
 
@@ -33,38 +33,42 @@ npm install
 ├── README.md
 ├── security-report.pdf
 ├── Start.vbs
-├── app/
-│   ├── package.json
-│   └── package-lock.json
-├── config/
-│   ├── config.json.template
-│   ├── config.json (wird automatisch erstellt)
-│   ├── user-settings.json.template
-│   └── user-settings.json (wird automatisch erstellt)
-├── src/
-│   ├── main/
-│   │   └── main.js
-│   ├── preload/
-│   │   └── preload.js
-│   ├── renderer/
-│   │   ├── renderer.js
-│   │   └── utils/
-│   │       ├── i18n.js
-│   │       └── vote-patterns.js
-│   └── ui/
-│       ├── index.html
-│       └── styles.css
-├── assets/
-│   ├── disclaimer.hta
-│   ├── status.hta
-│   └── Uninstall.hta
-└── scripts/
-    └── debug-console.bat
+└── software/
+    ├── app/
+    │   ├── package.json
+    │   └── package-lock.json
+    ├── config/
+    │   ├── config.json.template
+    │   ├── config.json (wird automatisch erstellt)
+    │   ├── user-settings.json.template
+    │   └── user-settings.json (wird automatisch erstellt)
+    ├── src/
+    │   ├── main/
+    │   │   └── main.js
+    │   ├── preload/
+    │   │   └── preload.js
+    │   ├── renderer/
+    │   │   ├── renderer.js
+    │   │   └── utils/
+    │   │       ├── i18n.js
+    │   │       └── vote-patterns.js
+    │   └── ui/
+    │       ├── index.html
+    │       └── styles.css
+    ├── assets/
+    │   ├── disclaimer.hta
+    │   ├── status.hta
+    │   └── Uninstall.hta
+    ├── scripts/
+    │   └── debug-console.bat
+    └── data/ (wird zur Laufzeit erstellt)
+        ├── update-info.txt
+        └── disclaimer-accepted.txt
 ```
 
 ## Konfiguration
 
-### config/config.json
+### software/config/config.json
 
 Enthält alle verfügbaren Services mit Selektoren:
 
@@ -100,7 +104,7 @@ Enthält alle verfügbaren Services mit Selektoren:
 - `prosemirror` - ProseMirror (Claude, Mistral)
 - `lexical` - Lexical Editor (Perplexity)
 
-### config/user-settings.json
+### software/config/user-settings.json
 
 Benutzereinstellungen (wird automatisch gespeichert):
 
@@ -124,15 +128,15 @@ Benutzereinstellungen (wird automatisch gespeichert):
 
 ## Neuen Service hinzufügen
 
-1. Service in `config/config.json` unter `services` ergänzen
+1. Service in `software/config/config.json` unter `services` ergänzen
 2. App neu starten
 3. Service in der Statusleiste aktivieren
 
 ### Selektoren finden
 
-1. App mit `scripts/debug-console.bat` starten (oder `cd app && npm start -- --dev`)
+1. App mit `software/scripts/debug-console.bat` starten (oder `cd software/app && npm start -- --dev`)
 2. In der Console: `debugSelectors("service-id")`
-3. Passende Selektoren in `config/config.json` eintragen
+3. Passende Selektoren in `software/config/config.json` eintragen
 
 ## Features im Detail
 
@@ -173,7 +177,7 @@ Einige Services (z.B. Gemini) blockieren innerHTML. Der `editorType: "quill"` um
 Sessions sind pro Service isoliert. Reload-Button (↻) oder App neu starten.
 
 ### Config-Dateien nicht gefunden
-Stelle sicher, dass die Template-Dateien in `config/` vorhanden sind. Beim ersten Start werden die eigentlichen Config-Dateien automatisch erstellt.
+Stelle sicher, dass die Template-Dateien in `software/config/` vorhanden sind. Beim ersten Start werden die eigentlichen Config-Dateien automatisch erstellt.
 
 ## Entwickler-Hinweise
 
@@ -187,10 +191,10 @@ Im Debug-Modus verfügbar:
 
 ### Code-Struktur
 
-- **src/main/main.js** - Electron Main-Process (Window-Management, IPC, File-IO)
-- **src/renderer/renderer.js** - Renderer-Process (UI-Logik, WebView-Management)
-- **src/preload/preload.js** - Context-Bridge für sichere IPC-Kommunikation
-- **src/renderer/utils/** - Utility-Module (i18n, vote-patterns)
+- **software/src/main/main.js** - Electron Main-Process (Window-Management, IPC, File-IO)
+- **software/src/renderer/renderer.js** - Renderer-Process (UI-Logik, WebView-Management)
+- **software/src/preload/preload.js** - Context-Bridge für sichere IPC-Kommunikation
+- **software/src/renderer/utils/** - Utility-Module (i18n, vote-patterns)
 
 ## Lizenz
 

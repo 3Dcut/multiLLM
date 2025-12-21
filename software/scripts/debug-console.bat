@@ -1,6 +1,6 @@
 @echo off
-cd /d "%~dp0\.."
-cd app
+cd /d "%~dp0\..\.."
+cd software\app
 echo === LLM MultiChat Debug Console ===
 echo.
 echo Aktuelles Verzeichnis: %cd%
