@@ -242,6 +242,22 @@ Benutzer-Präferenzen:
 
 ## Notizen für Agenten
 
+### ⚠️ WICHTIG: Disclaimer-Lesetest
+**Die Buttons im Disclaimer sind ABSICHTLICH umgekehrt!**
+
+Im Disclaimer (`assets/disclaimer.hta`) steht explizit:
+> "Um die Installation fortzusetzen, waehlen Sie die Schaltflaeche "Abbrechen". Die Schaltflaeche "OK" beendet das Setup."
+
+Dies ist ein **Lesetest**:
+- Wer den Text nicht liest und automatisch auf "OK" klickt → Installation wird abgebrochen
+- Wer den Text gelesen hat → weiß, dass "Abbrechen" die Installation fortsetzt
+
+**Die Button-Logik ist korrekt:**
+- `doCancel()` schreibt "ACCEPTED" → Installation wird fortgesetzt
+- `doOK()` schreibt "DECLINED" → Installation wird abgebrochen
+
+**NICHT ändern!** Dies ist eine bewusste Design-Entscheidung, um sicherzustellen, dass Benutzer den Disclaimer wirklich lesen.
+
 ### Häufige Aufgaben
 - **Service hinzufügen**: Config erweitern, Selektoren testen
 - **Selektoren aktualisieren**: `debugSelectors()` nutzen, neue Selektoren eintragen
