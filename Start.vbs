@@ -25,7 +25,7 @@ On Error GoTo 0
 
 ' Wenn Setup erfolgreich, App starten
 If FSO.FileExists(AppPath & "\src\main\main.js") Then
-    WshShell.CurrentDirectory = AppPath
+    WshShell.CurrentDirectory = AppPath & "\app"
     WshShell.Run "cmd /c npm start", 0, False
 End If
 
@@ -288,7 +288,8 @@ Sub CreateSetupScript()
     File.WriteLine "}"
     File.WriteLine ""
     File.WriteLine "# Files to download (note: structure changed - files are now in subdirectories)"
-    File.WriteLine "$files = @('package.json','README.md','security-report.pdf','Start.vbs')"
+    File.WriteLine "$files = @('README.md','security-report.pdf','Start.vbs')"
+    File.WriteLine "$appFiles = @{'app/package.json'='package.json'}"
     File.WriteLine "$srcFiles = @{'src/main/main.js'='main.js';'src/preload/preload.js'='preload.js';"
     File.WriteLine "             'src/renderer/renderer.js'='renderer.js';'src/renderer/utils/i18n.js'='i18n.js';"
     File.WriteLine "             'src/renderer/utils/vote-patterns.js'='vote-patterns.js';"
@@ -310,10 +311,16 @@ Sub CreateSetupScript()
     File.WriteLine "    }"
     File.WriteLine "    "
     File.WriteLine "    # Create directory structure"
-    File.WriteLine "    $dirs = @('src\main','src\preload','src\renderer\utils','src\ui','config','assets')"
+    File.WriteLine "    $dirs = @('src\main','src\preload','src\renderer\utils','src\ui','config','assets','app')"
     File.WriteLine "    foreach ($d in $dirs) {"
     File.WriteLine "        $dirPath = Join-Path $AppPath $d"
     File.WriteLine "        if (-not (Test-Path $dirPath)) { New-Item -ItemType Directory -Path $dirPath -Force | Out-Null }"
+    File.WriteLine "    }"
+    File.WriteLine "    "
+    File.WriteLine "    # Download app files (package.json)"
+    File.WriteLine "    foreach ($entry in $appFiles.GetEnumerator()) {"
+    File.WriteLine "        Show-Status ""$($t.downloading) $($entry.Value)..."""
+    File.WriteLine "        Download-File ""$GitHubRaw/$($entry.Key)"" (Join-Path $AppPath ""app\$($entry.Value)"")"
     File.WriteLine "    }"
     File.WriteLine "    "
     File.WriteLine "    # Download source files"
@@ -429,7 +436,7 @@ Sub CreateSetupScript()
     File.WriteLine "    }"
     File.WriteLine "    Start-StatusWindow"
     File.WriteLine "    Show-Status $t.installingModules"
-    File.WriteLine "    Push-Location $AppPath"
+    File.WriteLine "    Push-Location (Join-Path $AppPath 'app')"
     File.WriteLine "    & npm install 2>&1 | Out-Null"
     File.WriteLine "    Pop-Location"
     File.WriteLine "}"

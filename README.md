@@ -16,14 +16,15 @@ Eine Electron-App zum parallelen Abfragen mehrerer LLM-Dienste.
 ## Installation
 
 ```bash
+cd app
 npm install
 ```
 
 ## Starten
 
 - **Mit GUI:** Doppelklick auf `Start.vbs` (ohne CMD-Fenster)
-- **Mit CMD:** `npm start`
-- **Debug-Modus:** `npm start -- --dev` oder `scripts/debug-console.bat`
+- **Mit CMD:** `cd app && npm start`
+- **Debug-Modus:** `scripts/debug-console.bat` oder `cd app && npm start -- --dev`
 
 ## Projektstruktur
 
@@ -32,7 +33,9 @@ npm install
 ├── README.md
 ├── security-report.pdf
 ├── Start.vbs
-├── package.json
+├── app/
+│   ├── package.json
+│   └── package-lock.json
 ├── config/
 │   ├── config.json.template
 │   ├── config.json (wird automatisch erstellt)
@@ -127,7 +130,7 @@ Benutzereinstellungen (wird automatisch gespeichert):
 
 ### Selektoren finden
 
-1. App mit `scripts/debug-console.bat` starten (oder `npm start -- --dev`)
+1. App mit `scripts/debug-console.bat` starten (oder `cd app && npm start -- --dev`)
 2. In der Console: `debugSelectors("service-id")`
 3. Passende Selektoren in `config/config.json` eintragen
 

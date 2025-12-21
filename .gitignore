@@ -3,6 +3,10 @@ data/
 
 # Node modules (falls npm install verwendet wird)
 node_modules/
+app/node_modules/
+
+# Package lock file (wird bei npm install erstellt)
+app/package-lock.json
 
 # Logs
 *.log
