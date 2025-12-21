@@ -1,0 +1,12 @@
+# Runtime data directory
+data/
+
+# Node modules (falls npm install verwendet wird)
+node_modules/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
