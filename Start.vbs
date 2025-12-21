@@ -265,7 +265,7 @@ Sub CreateSetupScript()
     File.WriteLine "    if ($disclaimerMissing) {"
     File.WriteLine "        Show-Status $t.downloading"
     File.WriteLine "    }"
-    File.WriteLine "    if (-not (Download-File ""$GitHubRaw/assets/disclaimer.hta"" $disclaimerPath)) {"
+    File.WriteLine "    if (-not (Download-File ""$GitHubRaw/software/assets/disclaimer.hta"" $disclaimerPath)) {"
     File.WriteLine "        if ($disclaimerMissing) {"
     File.WriteLine "            Close-Status"
     File.WriteLine "            [System.Windows.Forms.MessageBox]::Show('Disclaimer konnte nicht heruntergeladen werden.', 'Error', 'OK', 'Error')"
