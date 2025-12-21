@@ -2,7 +2,7 @@
   "name": "llm-multichat",
   "version": "1.0.0",
   "description": "Multi-LLM Chat Interface - Parallel queries to multiple LLMs",
-  "main": "main.js",
+  "main": "src/main/main.js",
   "scripts": {
     "start": "electron ."
   },

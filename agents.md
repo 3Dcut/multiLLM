@@ -89,30 +89,44 @@
 - User-Agent-Spoofing (Chrome 131.0.0.0)
 - Custom Accept-Language Header
 
-## Dateistruktur
+## Dateistruktur (REFACTORIERT)
 
-### Core-Dateien
-- `main.js`: Electron Main-Process (Window-Management, IPC, File-IO)
-- `renderer.js`: Renderer-Process (UI-Logik, WebView-Management, Voting)
-- `preload.js`: Context-Bridge für sichere IPC-Kommunikation
-- `index.html`: Haupt-HTML-Struktur
-- `styles.css`: Styling
-
-### Konfiguration
-- `config.json.template`: Template für Service-Konfiguration
-- `user-settings.json.template`: Template für Benutzer-Einstellungen
+### Root-Level
+- `README.md`: Dokumentation
+- `security-report.pdf`: Sicherheitsbericht
+- `Start.vbs`: Start-Script ohne CMD-Fenster
 - `package.json`: NPM-Konfiguration
 
-### Feature-Module
+### config/
+- `config.json.template`: Template für Service-Konfiguration
+- `config.json`: Aktuelle Service-Konfiguration (wird automatisch erstellt)
+- `user-settings.json.template`: Template für Benutzer-Einstellungen
+- `user-settings.json`: Aktuelle Benutzer-Einstellungen (wird automatisch erstellt)
+
+### src/main/
+- `main.js`: Electron Main-Process (Window-Management, IPC, File-IO)
+
+### src/preload/
+- `preload.js`: Context-Bridge für sichere IPC-Kommunikation
+
+### src/renderer/
+- `renderer.js`: Renderer-Process (UI-Logik, WebView-Management, Voting)
+
+### src/renderer/utils/
 - `i18n.js`: Internationalisierung (Übersetzungen, Sprachverwaltung)
 - `vote-patterns.js`: Vote-Erkennungs-Patterns (Regex, Strategien)
 
-### Helper-Dateien
-- `Start.vbs`: Start-Script ohne CMD-Fenster
-- `_debug-console.bat`: Debug-Modus
+### src/ui/
+- `index.html`: Haupt-HTML-Struktur
+- `styles.css`: Styling
+
+### assets/
 - `disclaimer.hta`: Disclaimer-Dialog
 - `status.hta`: Status-Dialog
 - `Uninstall.hta`: Deinstallations-Dialog
+
+### scripts/
+- `debug-console.bat`: Debug-Modus
 
 ## Konfiguration
 

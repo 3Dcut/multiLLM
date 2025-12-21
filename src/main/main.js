@@ -12,9 +12,10 @@ const languageHeaders = {
   nl: 'nl-NL,nl;q=0.9,en;q=0.8'
 };
 
-// Pfade zu den Config-Dateien
-const configPath = path.join(__dirname, 'config.json');
-const userSettingsPath = path.join(__dirname, 'user-settings.json');
+// Pfade zu den Config-Dateien (relativ zum Projekt-Root)
+const rootDir = path.join(__dirname, '..', '..');
+const configPath = path.join(rootDir, 'config', 'config.json');
+const userSettingsPath = path.join(rootDir, 'config', 'user-settings.json');
 
 // Configs laden
 function loadConfig() {
@@ -62,7 +63,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '..', 'preload', 'preload.js'),
       webviewTag: true
     },
     title: 'LLM MultiChat',
@@ -96,7 +97,7 @@ function createWindow() {
     callback({ requestHeaders: details.requestHeaders });
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
   
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
@@ -137,10 +138,10 @@ ipcMain.handle('read-clipboard', () => {
   return clipboard.readText();
 });
 
-// File Handler (für History-Dateien)
+// File Handler (für History-Dateien - im Root-Verzeichnis)
 ipcMain.handle('read-file', (event, filename) => {
   try {
-    const filePath = path.join(__dirname, filename);
+    const filePath = path.join(rootDir, filename);
     if (fs.existsSync(filePath)) {
       return fs.readFileSync(filePath, 'utf8');
     }
@@ -153,7 +154,7 @@ ipcMain.handle('read-file', (event, filename) => {
 
 ipcMain.handle('write-file', (event, filename, data) => {
   try {
-    const filePath = path.join(__dirname, filename);
+    const filePath = path.join(rootDir, filename);
     fs.writeFileSync(filePath, data, 'utf8');
     return true;
   } catch (e) {
