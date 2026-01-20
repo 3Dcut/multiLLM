@@ -1788,6 +1788,7 @@ function setupConversationEventListeners() {
   // Event listeners for conversation mode (called after buildWebViews)
   document.getElementById('conversation-mode-toggle')?.addEventListener('click', toggleConversationMode);
   document.getElementById('conversation-mode-close-btn')?.addEventListener('click', toggleConversationMode);
+  document.getElementById('load-services')?.addEventListener('click', loadServices);
   document.getElementById('start-conversation')?.addEventListener('click', startConversation);
   document.getElementById('pause-conversation')?.addEventListener('click', pauseConversation);
   document.getElementById('resume-conversation')?.addEventListener('click', resumeConversation);
