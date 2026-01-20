@@ -274,22 +274,35 @@ class ConversationController {
   /**
    * Sleep function that triggers a countdown callback
    */
+  /**
+   * Sleep function that triggers a countdown callback
+   * Handles pausing by checking this.isPaused
+   */
   async sleepWithCountdown(duration, tickCallback) {
-    let remaining = Math.ceil(duration / 1000);
-    tickCallback(remaining); // Initial display
+    let remainingMs = duration;
 
-    const interval = setInterval(() => {
-      remaining--;
-      if (remaining >= 0) {
-        tickCallback(remaining);
-      }
-      if (remaining <= 0) {
-        clearInterval(interval);
-      }
-    }, 1000);
+    // Initial display
+    tickCallback(Math.ceil(remainingMs / 1000));
 
-    await window.ResponseMonitor.sleep(duration);
-    clearInterval(interval); // Ensure cleared in case of timing mismatch
+    // Check every 100ms
+    const intervalTime = 100;
+
+    while (remainingMs > 0 && !this.shouldStop) {
+      // If paused, just wait without decrementing
+      if (this.isPaused) {
+        await window.ResponseMonitor.sleep(intervalTime);
+        continue;
+      }
+
+      await window.ResponseMonitor.sleep(intervalTime);
+      remainingMs -= intervalTime;
+
+      // Update display every second (approximately)
+      if (remainingMs % 1000 < intervalTime) {
+        tickCallback(Math.ceil(remainingMs / 1000));
+      }
+    }
+
     tickCallback(0); // Final clear
   }
 
