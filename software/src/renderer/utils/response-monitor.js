@@ -61,8 +61,8 @@ async function waitForResponse(webview, service, timeout = 60000) {
 function watchTypingIndicator(webview, service) {
   return new Promise((resolve) => {
     if (!service.typingIndicatorSelectors || service.typingIndicatorSelectors.length === 0) {
-      // Strategy not applicable for this service
-      return resolve({ method: 'typing-indicator-na' });
+      // Strategy not applicable for this service, return a pending promise
+      return new Promise(() => {});
     }
 
     const checkInterval = 500; // Check every 500ms
@@ -160,8 +160,8 @@ function watchDOMStability(webview, service) {
 function watchStreamingComplete(webview, service) {
   return new Promise((resolve) => {
     if (!service.streamingCompleteSelectors || service.streamingCompleteSelectors.length === 0) {
-      // Strategy not applicable for this service
-      return resolve({ method: 'streaming-complete-na' });
+      // Strategy not applicable for this service, return a pending promise
+      return new Promise(() => {});
     }
 
     const checkInterval = 500;
