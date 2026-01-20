@@ -1485,6 +1485,20 @@ function loadServices() {
 
   console.log('[ConversationMode] Loading services:', serviceAId, serviceBId);
 
+  // --- START FIX ---
+  // Cleanup previous dynamic conversation webviews
+  Object.keys(webviews).forEach(id => {
+    if (id.endsWith('-a') || id.endsWith('-b')) {
+      const container = document.getElementById(`${id}-container`);
+      if (container) {
+        container.remove();
+      }
+      delete webviews[id];
+      console.log(`[ConversationMode] Cleaned up previous instance: ${id}`);
+    }
+  });
+  // --- END FIX ---
+
   // Hide all services first to ensure a clean state
   document.querySelectorAll('.webview-container[data-service]').forEach(container => {
       if(container.id !== 'conversation-panel-container') {

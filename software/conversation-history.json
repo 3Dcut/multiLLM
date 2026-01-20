@@ -1,15 +1,45 @@
 {
-  "serviceA": "mistral",
+  "serviceA": "chatgpt",
   "serviceB": "perplexity",
-  "startTime": "2026-01-20T14:01:33.237Z",
-  "endTime": "2026-01-20T14:01:33.237Z",
-  "turns": 0,
+  "startTime": "2026-01-20T14:08:53.706Z",
+  "endTime": "2026-01-20T14:09:22.764Z",
+  "turns": 5,
   "messages": [
     {
-      "timestamp": "2026-01-20T14:01:33.237Z",
+      "timestamp": "2026-01-20T14:08:53.706Z",
       "speaker": "user",
-      "message": "test",
+      "message": "hallo",
       "turn": 0
+    },
+    {
+      "timestamp": "2026-01-20T14:08:58.302Z",
+      "speaker": "chatgpt",
+      "message": "Hallo Jannik.\nWie kann ich dich unterstützen?",
+      "turn": 1
+    },
+    {
+      "timestamp": "2026-01-20T14:09:06.012Z",
+      "speaker": "chatgpt",
+      "message": "Hallo Jannik.\nWie kann ich dich unterstützen?",
+      "turn": 2
+    },
+    {
+      "timestamp": "2026-01-20T14:09:13.584Z",
+      "speaker": "chatgpt",
+      "message": "Hallo Jannik.\nWie kann ich dich unterstützen?",
+      "turn": 3
+    },
+    {
+      "timestamp": "2026-01-20T14:09:18.197Z",
+      "speaker": "perplexity",
+      "message": "Am meisten hilfst du, indem du mir gute „Trainingsdaten“ lieferst: klare Fragen, ehrliches Feedback und Beispiele aus deiner Praxis.hypnopixels+1​\nWie du konkret helfen kannst\n\n\nKlar und konkret fragen\nJe präziser dein Use-Case (z.B. Power Automate-Flow, Linux-Problem, Modell-Frage), desto besser kann die Antwort werden – gern mit Beispielen, Logs, Screens, Pseudo-Code.hypnopixels​\n\n\nAntworten bewerten\nNutze Daumen hoch/runter und ggf. die Kommentaroption, vor allem wenn etwas fachlich falsch, zu oberflächlich oder am Thema vorbei ist – das fließt direkt in Qualitätsverbesserungen ein.linkedin+2​\n\n\nGrenzfälle und Bugs zeigen\nWenn du Stellen findest, wo Antworten gefährlich missverständlich, sachlich daneben oder unpraktisch für den Alltag im IT-Betrieb sind, beschreibe kurz, was genau schief läuft und was du erwartet hättest.perplexity​\n\n\nKomplexe Praxis-Szenarien einbringen\nDeine typischen Themen (AI-Integration, Power Automate, SSH/Linux, Hardware-Setup) sind ideale „Real-World“-Tests – je mehr solche Szenarien du spielst, desto besser lassen sich Modelle für ähnliche Nutzer optimieren.\n\n\nFeature-/Produkt-Feedback geben\nFür Ideen zu Funktionen oder Verhalten kannst du (außerhalb des Chats) den offiziellen Support bzw. die bekannten Kanäle wie E-Mail oder Discord nutzen (z.B. support@perplexity.ai).perplexity+1​\n\n\nWenn du magst, können wir direkt anfangen: Schick einfach einen typischen „Problemfall“ aus deinem Alltag, bei dem Assistenten bisher eher versagen, und es gibt eine optimierte Version davon.library​",
+      "turn": 4
+    },
+    {
+      "timestamp": "2026-01-20T14:09:22.764Z",
+      "speaker": "chatgpt",
+      "message": "Hallo Jannik.\nWie kann ich dich unterstützen?",
+      "turn": 5
     }
   ]
 }

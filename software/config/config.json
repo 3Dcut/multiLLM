@@ -6,6 +6,7 @@
       "url": "https://m365.cloud.microsoft/chat/",
       "color": "#00a4ef",
       "inputSelectors": [
+        "#m365-chat-editor-target-element",
         "#m365-chat-input-shared-container [contenteditable=\"true\"]",
         "#m365-chat-input-shared-container textarea",
         "[class*=\"fai-ChatInput\"] [contenteditable=\"true\"]",
