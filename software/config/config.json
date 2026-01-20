@@ -1,0 +1,229 @@
+{
+  "services": [
+    {
+      "id": "copilot",
+      "name": "Microsoft Copilot",
+      "url": "https://m365.cloud.microsoft/chat/",
+      "color": "#00a4ef",
+      "inputSelectors": [
+        "#m365-chat-input-shared-container [contenteditable=\"true\"]",
+        "#m365-chat-input-shared-container textarea",
+        "[class*=\"fai-ChatInput\"] [contenteditable=\"true\"]",
+        "[class*=\"ChatInput\"] [contenteditable=\"true\"]",
+        "#m365-chat-input-shared-container div[role=\"textbox\"]"
+      ],
+      "submitSelectors": [
+        "#m365-chat-input-shared-container button[type=\"submit\"]",
+        "#m365-chat-input-shared-container button[aria-label*=\"Send\"]",
+        "#m365-chat-input-shared-container button[aria-label*=\"Senden\"]",
+        "[class*=\"fai-ChatInput\"] button",
+        "[class*=\"ChatInput\"] button[type=\"submit\"]"
+      ],
+      "responseSelectors": [
+        "[data-testid='markdown-reply']",
+        ".fai-CopilotMessage__content",
+        "[data-content='ai-message']"
+      ],
+      "typingIndicatorSelectors": [
+        "[class*='typing']",
+        "[data-testid='typing-indicator']",
+        ".fai-TypingIndicator",
+        "[class*='thinking']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[aria-label*='Stop']:not([disabled])",
+        "button[aria-label*='Stoppen']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "default"
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "url": "https://claude.ai/new",
+      "color": "#d97757",
+      "inputSelectors": [
+        "div[contenteditable=\"true\"].ProseMirror",
+        "div.ProseMirror[contenteditable=\"true\"]",
+        "fieldset div[contenteditable=\"true\"]",
+        "[data-testid=\"composer-input\"]"
+      ],
+      "submitSelectors": [
+        "button[aria-label=\"Send Message\"]",
+        "button[aria-label=\"Nachricht senden\"]",
+        "fieldset button[type=\"button\"]",
+        "[data-testid=\"composer-send-button\"]"
+      ],
+      "responseSelectors": [
+        ".font-claude-response .standard-markdown",
+        ".font-claude-response",
+        "[data-is-streaming] .standard-markdown"
+      ],
+      "typingIndicatorSelectors": [
+        "[data-is-streaming='true']",
+        "[class*='typing']",
+        "[class*='thinking']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[aria-label*='Stop']:not([disabled])",
+        "button[aria-label*='Stopp']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "prosemirror"
+    },
+    {
+      "id": "gemini",
+      "name": "Google Gemini",
+      "url": "https://gemini.google.com/app",
+      "color": "#8e75b2",
+      "inputSelectors": [
+        "[aria-label=\"Prompt hier eingeben\"]",
+        "[aria-label=\"Enter a prompt here\"]",
+        "div.ql-editor.textarea.new-input-ui[contenteditable=\"true\"]",
+        "div.ql-editor.textarea[contenteditable=\"true\"]",
+        "rich-textarea div.ql-editor[contenteditable=\"true\"]"
+      ],
+      "submitSelectors": [
+        "button.send-button[aria-label=\"Nachricht senden\"]",
+        "button.send-button[aria-label=\"Send message\"]",
+        "button.send-button.submit",
+        "button.send-button",
+        "button[aria-label=\"Nachricht senden\"]"
+      ],
+      "responseSelectors": [
+        "message-content .markdown-main-panel",
+        "message-content .markdown",
+        "model-response .markdown"
+      ],
+      "typingIndicatorSelectors": [
+        "[class*='typing']",
+        "[class*='thinking']",
+        "[data-testid='typing-indicator']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[aria-label*='Stop']:not([disabled])",
+        "button[aria-label*='Stopp']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "quill"
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "url": "https://chat.openai.com/",
+      "color": "#10a37f",
+      "inputSelectors": [
+        "#prompt-textarea",
+        "textarea#prompt-textarea",
+        "div#prompt-textarea[contenteditable=\"true\"]",
+        "[data-testid=\"composer-input\"]"
+      ],
+      "submitSelectors": [
+        "button[data-testid=\"send-button\"]",
+        "button[aria-label=\"Send prompt\"]",
+        "[data-testid=\"composer-send-button\"]"
+      ],
+      "responseSelectors": [
+        "[data-message-author-role='assistant'] .markdown.prose",
+        "[data-message-author-role='assistant'] [data-testid='text-message-part']",
+        "[data-message-author-role='assistant'] .markdown-container-style"
+      ],
+      "typingIndicatorSelectors": [
+        "[class*='typing']",
+        "[data-testid='typing-indicator']",
+        "[class*='thinking']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[data-testid='stop-button']:not([disabled])",
+        "button[aria-label*='Stop']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "default"
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "url": "https://www.perplexity.ai/",
+      "color": "#20b8cd",
+      "inputSelectors": [
+        "#ask-input",
+        "div#ask-input[contenteditable=\"true\"]",
+        "[data-lexical-editor=\"true\"]",
+        "div[role=\"textbox\"][contenteditable=\"true\"]"
+      ],
+      "submitSelectors": [
+        "button[data-testid=\"submit-button\"]",
+        "button[aria-label=\"Submit\"]",
+        "button[aria-label=\"Absenden\"]"
+      ],
+      "responseSelectors": [
+        ".prose.dark\\:prose-invert",
+        ".prose",
+        "[class*='answer-content']"
+      ],
+      "typingIndicatorSelectors": [
+        "[class*='typing']",
+        "[data-testid='typing-indicator']",
+        "[class*='loading']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[aria-label*='Stop']:not([disabled])",
+        "button[aria-label*='Stopp']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "lexical"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral Le Chat",
+      "url": "https://chat.mistral.ai/chat",
+      "color": "#ff7000",
+      "inputSelectors": [
+        "div.ProseMirror[data-placeholder*=\"Chat\"]",
+        "div.ProseMirror[data-placeholder*=\"Le Chat\"]",
+        "div.ProseMirror[contenteditable=\"true\"]",
+        "[data-placeholder*=\"Frage\"] .ProseMirror"
+      ],
+      "submitSelectors": [
+        "button[type=\"submit\"][aria-label*=\"Send\"]",
+        "button[type=\"submit\"][aria-label*=\"Senden\"]",
+        "button[aria-label=\"Send question\"]",
+        "button[type=\"submit\"]"
+      ],
+      "responseSelectors": [
+        "[data-message-author-role='assistant'] .markdown-container-style",
+        "[data-message-author-role='assistant'] [data-testid='text-message-part']",
+        "[data-message-author-role='assistant'] [data-message-part-type='answer']"
+      ],
+      "typingIndicatorSelectors": [
+        "[class*='typing']",
+        "[data-testid='typing-indicator']",
+        "[class*='thinking']"
+      ],
+      "streamingCompleteSelectors": [
+        "button[aria-label*='Stop']:not([disabled])",
+        "button[aria-label*='Stopp']:not([disabled])"
+      ],
+      "responseStabilityWait": 2000,
+      "maxResponseWait": 60000,
+      "editorType": "prosemirror"
+    }
+  ],
+  "prompts": {
+    "compareIntro": "Vergleiche und bewerte die folgenden Antworten verschiedener KIs:\n\n",
+    "compareOutro": "---\n\nBewerte anhand der Argumente, welche Antwort am besten/richtigsten ist. Begründe deine Einschätzung.",
+    "answerSeparator": "--- {name} ---\n{text}\n\n"
+  },
+  "voteStrategy": "weighted",
+  "voteStrategies": {
+    "pattern": "Feste Muster (Kurzantwort: Ja, Fazit: Nein, etc.)",
+    "first": "Erstes Ja/Nein im Text gewinnt",
+    "count": "Zaehlt Ja vs Nein - Mehrheit gewinnt", 
+    "weighted": "Gewichtet: Satzanfang=10, erste 50 Zeichen=5, danach=1"
+  }
+}
