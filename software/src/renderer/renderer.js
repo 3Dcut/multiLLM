@@ -56,20 +56,20 @@ async function init() {
     console.log('DEBUG: Loading config...');
     config = await window.electronAPI.getConfig();
     console.log('DEBUG: Config loaded:', config);
-    
+
     console.log('DEBUG: Loading user settings...');
     userSettings = await window.electronAPI.getUserSettings();
     console.log('DEBUG: User settings loaded:', userSettings);
-    
+
     console.log('Config loaded:', config.services.length, 'services');
-    
+
     if (userSettings.language && I18N.translations[userSettings.language]) {
       I18N.setLanguage(userSettings.language);
     }
-    
+
     await loadPromptHistory();
     await loadSessionHistory();
-    
+
     console.log('DEBUG: Building UI...');
     buildStatusBar();
     buildWebViews();
@@ -79,10 +79,10 @@ async function init() {
     setupEventListeners();
     setupConversationEventListeners();
     console.log('DEBUG: Event listeners set up!');
-    
+
     updateUILanguage();
     updateSessionNavButtons();
-    
+
     console.log('=== DEBUG: init() completed ===');
   } catch (e) {
     console.error('Error initializing:', e);
@@ -93,13 +93,13 @@ async function init() {
 // Status-Bar aufbauen
 function buildStatusBar() {
   statusBar.innerHTML = '';
-  
+
   config.services.forEach(service => {
     const isActive = userSettings.activeServices.includes(service.id);
     const statusItem = document.createElement('div');
     statusItem.className = `status-item ${isActive ? '' : 'disabled'}`;
     statusItem.dataset.service = service.id;
-    
+
     statusItem.innerHTML = `
       <label class="toggle-switch">
         <input type="checkbox" class="service-toggle" data-service="${service.id}" ${isActive ? 'checked' : ''}>
@@ -108,7 +108,7 @@ function buildStatusBar() {
       <span class="status-dot" style="background: ${isActive ? service.color : ''}"></span>
       <span>${service.name}</span>
     `;
-    
+
     statusBar.appendChild(statusItem);
   });
 }
@@ -261,11 +261,11 @@ function updateGridCount() {
 function applyLayout(layout) {
   webviewGrid.classList.remove('layout-grid', 'layout-horizontal', 'layout-vertical');
   webviewGrid.classList.add(`layout-${layout}`);
-  
+
   document.querySelectorAll('.layout-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.layout === layout);
   });
-  
+
   userSettings.layout = layout;
 }
 
@@ -280,7 +280,7 @@ function updateStatus(serviceId, status) {
 function toggleService(serviceId, enabled) {
   const container = document.getElementById(`${serviceId}-container`);
   const statusItem = document.querySelector(`.status-item[data-service="${serviceId}"]`);
-  
+
   if (enabled) {
     if (!userSettings.activeServices.includes(serviceId)) {
       userSettings.activeServices.push(serviceId);
@@ -292,7 +292,7 @@ function toggleService(serviceId, enabled) {
     container.classList.add('hidden');
     statusItem.classList.add('disabled');
   }
-  
+
   updateGridCount();
   saveSettings();
 }
@@ -420,21 +420,21 @@ async function sendToAll() {
   console.log('DEBUG: text =', text);
   console.log('DEBUG: userSettings.activeServices =', userSettings.activeServices);
   console.log('DEBUG: mutedServices =', [...mutedServices]);
-  
+
   const activeNonMuted = userSettings.activeServices.filter(id => !mutedServices.has(id));
   console.log('DEBUG: activeNonMuted =', activeNonMuted);
-  
+
   if (activeNonMuted.length === 0) {
     alert(I18N.t('msgNoActiveService'));
     return;
   }
-  
+
   resetVotes();
   if (text !== '.') addToPromptHistory(text);
-  
+
   sendButton.disabled = true;
   sendButton.innerHTML = '<span>⏳</span>';
-  
+
   const promises = config.services
     .filter(service => activeNonMuted.includes(service.id))
     .map(async (service) => {
@@ -449,10 +449,10 @@ async function sendToAll() {
         return { service: service.id, success: false, error: error.message };
       }
     });
-  
+
   await Promise.all(promises);
   clearMutedServices();
-  
+
   sendButton.disabled = false;
   sendButton.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
   promptInput.value = '';
@@ -462,7 +462,7 @@ async function sendToAll() {
 // Script für Bild-Einfügen erstellen
 function createPasteImageScript(service, base64Data, mimeType) {
   const serviceId = service.id;
-  
+
   return `
     (async function() {
       console.log('[${serviceId}] Starting image paste...');
@@ -539,11 +539,11 @@ async function pasteImageToAll() {
     alert(I18N.t('msgNoActiveService'));
     return;
   }
-  
+
   try {
     const clipboardItems = await navigator.clipboard.read();
     let imageBlob = null;
-    
+
     for (const item of clipboardItems) {
       const imageType = item.types.find(type => type.startsWith('image/'));
       if (imageType) {
@@ -551,21 +551,21 @@ async function pasteImageToAll() {
         break;
       }
     }
-    
+
     if (!imageBlob) {
       alert(I18N.t('msgNoImage'));
       return;
     }
-    
+
     pasteImageButton.disabled = true;
     pasteImageButton.classList.add('has-image');
-    
+
     const base64Data = await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(imageBlob);
     });
-    
+
     const promises = config.services
       .filter(service => userSettings.activeServices.includes(service.id))
       .map(async (service) => {
@@ -573,7 +573,7 @@ async function pasteImageToAll() {
           updateStatus(service.id, 'loading');
           const script = createPasteImageScript(service, base64Data, imageBlob.type);
           const result = await webviews[service.id].executeJavaScript(script);
-          
+
           if (result?.needsNativePaste) {
             webviews[service.id].focus();
             const focusScript = `(async function() {
@@ -589,7 +589,7 @@ async function pasteImageToAll() {
             updateStatus(service.id, 'ready');
             return { service: service.id, success: true, method: 'nativePaste' };
           }
-          
+
           updateStatus(service.id, result?.success ? 'ready' : 'error');
           return { service: service.id, ...result };
         } catch (error) {
@@ -598,11 +598,11 @@ async function pasteImageToAll() {
           return { service: service.id, success: false, error: error.message };
         }
       });
-    
+
     await Promise.all(promises);
     pasteImageButton.disabled = false;
     setTimeout(() => pasteImageButton.classList.remove('has-image'), 1000);
-    
+
   } catch (e) {
     console.error('Clipboard access error:', e);
     alert(I18N.t('msgClipboardError') + ': ' + e.message);
@@ -614,20 +614,20 @@ async function pasteImageToAll() {
 function setupEventListeners() {
   console.log('=== DEBUG: setupEventListeners() ===');
   console.log('DEBUG: sendButton =', sendButton);
-  
+
   sendButton.addEventListener('click', () => {
     console.log('DEBUG: Send button clicked!');
     sendToAll();
   });
   pasteImageButton.addEventListener('click', pasteImageToAll);
-  
+
   promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.ctrlKey) {
       console.log('DEBUG: Ctrl+Enter pressed!');
       e.preventDefault();
       sendToAll();
     }
-    
+
     if (e.key === 'ArrowUp' && promptHistory.length > 0) {
       const cursorAtStart = promptInput.selectionStart === 0 && promptInput.selectionEnd === 0;
       if (cursorAtStart || promptInput.value === '') {
@@ -635,7 +635,7 @@ function setupEventListeners() {
         navigatePromptHistory(-1);
       }
     }
-    
+
     if (e.key === 'ArrowDown' && promptHistoryIndex >= 0) {
       const cursorAtEnd = promptInput.selectionStart === promptInput.value.length;
       if (cursorAtEnd) {
@@ -644,24 +644,24 @@ function setupEventListeners() {
       }
     }
   });
-  
+
   document.addEventListener('keydown', (e) => {
     if (e.key === 'V' && e.ctrlKey && e.shiftKey) {
       e.preventDefault();
       pasteImageToAll();
     }
   });
-  
+
   statusBar.addEventListener('change', (e) => {
     if (e.target.classList.contains('service-toggle')) {
       toggleService(e.target.dataset.service, e.target.checked);
     }
   });
-  
+
   webviewGrid.addEventListener('click', (e) => {
     const serviceId = e.target.dataset.service;
     if (!serviceId) return;
-    
+
     if (e.target.classList.contains('reload-btn')) {
       webviews[serviceId]?.reload();
     } else if (e.target.classList.contains('copy-response-btn')) {
@@ -677,8 +677,13 @@ function setupEventListeners() {
       toggleFocus(serviceId);
     }
   });
-  
+
   refreshAllButton.addEventListener('click', async () => {
+    if (conversationMode) {
+      resetConversation();
+      return;
+    }
+
     await saveCurrentSession();
     resetVotes();
     userSettings.activeServices.forEach(serviceId => {
@@ -688,10 +693,74 @@ function setupEventListeners() {
       }
     });
   });
-  
+
+  function resetConversation() {
+    console.log('[ConversationMode] Resetting conversation...');
+
+    // 1. Stop conversation
+    if (conversationController) {
+      conversationController.stop();
+      conversationController.setState('IDLE'); // Force IDLE state
+    }
+
+    // 2. Clear Transcript UI
+    const transcriptContent = document.getElementById('transcript-content');
+    if (transcriptContent) {
+      transcriptContent.innerHTML = '<div class="transcript-empty">Kein Gespräch aktiv. Klicke auf "Start" um zu beginnen.</div>';
+    }
+
+    // 3. Reset Buttons
+    document.getElementById('start-conversation').disabled = true;
+    document.getElementById('pause-conversation').disabled = true;
+    document.getElementById('resume-conversation').classList.add('hidden');
+    document.getElementById('pause-conversation').classList.remove('hidden');
+    document.getElementById('stop-conversation').disabled = true;
+    document.getElementById('export-conversation').disabled = true;
+
+    document.getElementById('load-services').disabled = false;
+    document.getElementById('load-services').textContent = '🔄 Load Services';
+
+    // 4. Reset Services Visibility
+    // Hide active conversation services
+    if (conversationServiceA) {
+      const container = document.getElementById(`${conversationServiceA.id}-container`);
+      if (container) container.classList.add('hidden');
+    }
+    if (conversationServiceB) {
+      const container = document.getElementById(`${conversationServiceB.id}-container`);
+      if (container) container.classList.add('hidden');
+    }
+
+    // Remove dynamically created instances
+    Object.keys(webviews).forEach(id => {
+      if (id.endsWith('-a') || id.endsWith('-b')) {
+        const container = document.getElementById(`${id}-container`);
+        if (container) {
+          container.remove();
+        }
+        delete webviews[id];
+        console.log(`[ConversationMode] Cleaned up dynamic instance: ${id}`);
+      }
+    });
+
+    // 5. Clear References
+    conversationServiceA = null;
+    conversationServiceB = null;
+
+    // 6. Reset Status Display
+    const statusEl = document.getElementById('conv-state');
+    if (statusEl) statusEl.textContent = 'IDLE';
+    const countdownEl = document.getElementById('conv-countdown');
+    if (countdownEl) countdownEl.textContent = '';
+    const turnInfoEl = document.getElementById('conv-turn-info');
+    if (turnInfoEl) turnInfoEl.textContent = 'Turn: 0/20';
+
+    console.log('[ConversationMode] Conversation reset complete.');
+  }
+
   document.getElementById('session-back-btn')?.addEventListener('click', () => navigateSessionHistory(-1));
   document.getElementById('session-forward-btn')?.addEventListener('click', () => navigateSessionHistory(1));
-  
+
   document.getElementById('compare-all-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('compare-all-btn');
     btn.disabled = true;
@@ -701,7 +770,7 @@ function setupEventListeners() {
     btn.disabled = false;
     btn.textContent = I18N.t('btnCompare');
   });
-  
+
   document.getElementById('vote-check-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('vote-check-btn');
     btn.disabled = true;
@@ -712,14 +781,14 @@ function setupEventListeners() {
     btn.disabled = false;
     btn.textContent = I18N.t('btnVote');
   });
-  
+
   document.querySelectorAll('.layout-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       applyLayout(btn.dataset.layout);
       saveSettings();
     });
   });
-  
+
   document.getElementById('language-btn')?.addEventListener('click', () => {
     const nextLang = I18N.getNextLanguage();
     I18N.setLanguage(nextLang);
@@ -737,7 +806,7 @@ window.debugSelectors = async (serviceId) => {
     console.log('Service not found:', serviceId);
     return;
   }
-  
+
   const script = `(function() {
     const inputs = document.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]');
     return Array.from(inputs).map((el, i) => ({
@@ -746,7 +815,7 @@ window.debugSelectors = async (serviceId) => {
       ariaLabel: el.getAttribute('aria-label')
     }));
   })();`;
-  
+
   const result = await webview.executeJavaScript(script);
   console.log(`[${serviceId}] Available inputs:`, result);
   return result;
@@ -766,10 +835,10 @@ async function getLastResponse(serviceId) {
     console.error(`[${serviceId}] No response selectors configured`);
     return null;
   }
-  
+
   const webview = webviews[serviceId];
   if (!webview) return null;
-  
+
   const script = `(function() {
     const selectors = ${JSON.stringify(service.responseSelectors)};
     let allResponses = [];
@@ -786,7 +855,7 @@ async function getLastResponse(serviceId) {
     const lastResponse = allResponses[allResponses.length - 1];
     return { success: true, text: (lastResponse.innerText || lastResponse.textContent || '').trim(), count: allResponses.length };
   })();`;
-  
+
   try {
     return await webview.executeJavaScript(script);
   } catch (e) {
@@ -813,7 +882,7 @@ async function copyResponse(serviceId) {
     alert(I18N.t('msgNoResponseFrom').replace('{service}', serviceId));
     return;
   }
-  
+
   try {
     await window.electronAPI.copyToClipboard(result.text);
     setButtonFeedback(`.copy-response-btn[data-service="${serviceId}"]`, '✅', '📋');
@@ -827,20 +896,20 @@ async function copyResponse(serviceId) {
 async function crossCompare(targetServiceId) {
   const responses = await getAllResponses();
   const otherResponses = Object.entries(responses).filter(([id]) => id !== targetServiceId);
-  
+
   if (otherResponses.length === 0) {
     alert(I18N.t('msgNoResponse'));
     return;
   }
-  
+
   let comparePrompt = I18N.t('crossComparePrompt');
   otherResponses.forEach(([id, data]) => {
     comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
-  
+
   const service = config.services.find(s => s.id === targetServiceId);
   if (!service) return;
-  
+
   try {
     await webviews[targetServiceId].executeJavaScript(createInjectionScript(service, comparePrompt));
     setButtonFeedback(`.compare-btn[data-service="${targetServiceId}"]`, '✅', '⚖️');
@@ -852,17 +921,17 @@ async function crossCompare(targetServiceId) {
 async function compareAll() {
   const responses = await getAllResponses();
   const responseList = Object.entries(responses);
-  
+
   if (responseList.length < 2) {
     alert(I18N.t('msgMinServices') || 'At least 2 services must have responses.');
     return;
   }
-  
+
   let comparePrompt = I18N.t('comparePrompt');
   responseList.forEach(([id, data]) => {
     comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
-  
+
   for (const serviceId of userSettings.activeServices) {
     const service = config.services.find(s => s.id === serviceId);
     if (!service) continue;
@@ -884,7 +953,7 @@ const voteStrategies = {
     if (isNein && !isJa) return 'nein';
     return 'unklar';
   },
-  
+
   first: (text) => {
     const start = text.substring(0, 150).toLowerCase();
     const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes|jawohl|genau|absolut|definitiv)[\s\.,!\-–:;,\n\r]/i);
@@ -894,7 +963,7 @@ const voteStrategies = {
     if (neinMatch && !jaMatch) return 'nein';
     return jaMatch.index < neinMatch.index ? 'ja' : 'nein';
   },
-  
+
   count: (text) => {
     const start = text.substring(0, 200).toLowerCase();
     const jaCount = (start.match(/\b(ja|yes|jawohl)\b/gi) || []).length;
@@ -904,11 +973,11 @@ const voteStrategies = {
     if (neinCount > jaCount) return 'nein';
     return 'unklar';
   },
-  
+
   weighted: (text) => {
     const start = text.substring(0, 250).toLowerCase();
     let jaScore = 0, neinScore = 0;
-    
+
     const getWeight = (pos) => {
       const before = text.substring(Math.max(0, pos - 5), pos);
       const isAfterSentence = /[.!?\n]\s*$/.test(before) || pos < 3;
@@ -917,14 +986,14 @@ const voteStrategies = {
       if (pos < 150) return 2;
       return 1;
     };
-    
+
     const jaWordsRegex = new RegExp('\\b(' + VotePatterns.jaWords.join('|') + ')\\b', 'gi');
     const neinWordsRegex = new RegExp('\\b(' + VotePatterns.neinWords.join('|') + ')\\b', 'gi');
-    
+
     let match;
     while ((match = jaWordsRegex.exec(start)) !== null) jaScore += getWeight(match.index);
     while ((match = neinWordsRegex.exec(start)) !== null) neinScore += getWeight(match.index);
-    
+
     if (jaScore === 0 && neinScore === 0) return 'unklar';
     if (jaScore >= 5 && jaScore > neinScore) return 'ja';
     if (neinScore >= 5 && neinScore > jaScore) return 'nein';
@@ -935,17 +1004,17 @@ const voteStrategies = {
 function detectVote(text, strategy) {
   const cleanedText = VotePatterns.cleanText(text);
   const lowerText = cleanedText.toLowerCase();
-  
+
   if (VotePatterns.isMeta(lowerText) || VotePatterns.isUnclear(lowerText)) {
     return 'unklar';
   }
-  
+
   if (strategy === 'weighted') {
     const patternResult = voteStrategies.pattern(lowerText);
     if (patternResult !== 'unklar') return patternResult;
     return voteStrategies.weighted(lowerText);
   }
-  
+
   return voteStrategies[strategy]?.(lowerText) || 'unklar';
 }
 
@@ -953,12 +1022,12 @@ async function evaluateYesNo() {
   const responses = await getAllResponses();
   const votes = { ja: [], nein: [], unklar: [] };
   const strategy = config.voteStrategy || 'weighted';
-  
+
   for (const [serviceId, data] of Object.entries(responses)) {
     const result = detectVote(data.text, strategy);
     votes[result].push({ id: serviceId, name: data.name });
   }
-  
+
   return votes;
 }
 
@@ -983,7 +1052,7 @@ function showVoteOverlays(show) {
     document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
     return;
   }
-  
+
   const addOverlay = (entries, colorClass) => {
     entries.forEach(entry => {
       const container = document.querySelector(`.webview-container[data-service="${entry.id}"]`);
@@ -994,7 +1063,7 @@ function showVoteOverlays(show) {
       }
     });
   };
-  
+
   addOverlay(lastVotes.ja, 'vote-overlay-yes');
   addOverlay(lastVotes.nein, 'vote-overlay-no');
   addOverlay(lastVotes.unklar, 'vote-overlay-unclear');
@@ -1005,22 +1074,22 @@ async function updateVoteDisplay() {
   lastVotes = votes;
   const voteDisplay = document.getElementById('vote-display');
   if (!voteDisplay) return;
-  
+
   const total = votes.ja.length + votes.nein.length + votes.unklar.length;
   if (total === 0) {
     voteDisplay.innerHTML = `<span class="vote-neutral">${I18N.t('voteNoResponses')}</span>`;
     return;
   }
-  
+
   const names = {
     ja: votes.ja.map(v => v.name).join(', '),
     nein: votes.nein.map(v => v.name).join(', '),
     unklar: votes.unklar.map(v => v.name).join(', ')
   };
-  
+
   let resultClass = 'vote-result-unclear';
   let resultText = I18N.t('voteUnclearResult');
-  
+
   if (votes.ja.length > votes.nein.length) {
     resultClass = 'vote-result-yes';
     resultText = I18N.t('voteMajorityYes');
@@ -1031,7 +1100,7 @@ async function updateVoteDisplay() {
     resultClass = 'vote-result-tie';
     resultText = I18N.t('voteTie');
   }
-  
+
   voteDisplay.innerHTML = `
     <div class="vote-container">
       <div class="vote-counts">
@@ -1044,7 +1113,7 @@ async function updateVoteDisplay() {
       </div>
     </div>
   `;
-  
+
   voteDisplay.addEventListener('mouseenter', () => showVoteOverlays(true));
   voteDisplay.addEventListener('mouseleave', () => showVoteOverlays(false));
 }
@@ -1053,7 +1122,7 @@ async function updateVoteDisplay() {
 function toggleMute(serviceId) {
   const btn = document.querySelector(`.mute-btn[data-service="${serviceId}"]`);
   const container = document.getElementById(`${serviceId}-container`);
-  
+
   if (mutedServices.has(serviceId)) {
     mutedServices.delete(serviceId);
     btn.textContent = '🔔';
@@ -1089,11 +1158,11 @@ function toggleFocus(serviceId) {
 function enterFocus(serviceId) {
   previousLayout = { activeServices: [...userSettings.activeServices], focusedService };
   focusedService = serviceId;
-  
+
   userSettings.activeServices.forEach(id => {
     const container = document.getElementById(`${id}-container`);
     if (!container) return;
-    
+
     if (id === serviceId) {
       container.classList.remove('hidden-by-focus');
       container.classList.add('is-focused');
@@ -1107,13 +1176,13 @@ function enterFocus(serviceId) {
       container.classList.add('hidden-by-focus');
     }
   });
-  
+
   webviewGrid.classList.add('focus-mode');
 }
 
 function exitFocus() {
   if (!focusedService) return;
-  
+
   userSettings.activeServices.forEach(id => {
     const container = document.getElementById(`${id}-container`);
     if (container) {
@@ -1126,7 +1195,7 @@ function exitFocus() {
       }
     }
   });
-  
+
   focusedService = null;
   previousLayout = null;
   webviewGrid.classList.remove('focus-mode');
@@ -1156,12 +1225,12 @@ async function savePromptHistory() {
 function addToPromptHistory(prompt) {
   if (!prompt || !prompt.trim()) return;
   if (promptHistory.length > 0 && promptHistory[promptHistory.length - 1] === prompt) return;
-  
+
   promptHistory.push(prompt);
   if (promptHistory.length > MAX_PROMPT_HISTORY) {
     promptHistory = promptHistory.slice(-MAX_PROMPT_HISTORY);
   }
-  
+
   promptHistoryIndex = -1;
   currentPromptBackup = '';
   savePromptHistory();
@@ -1169,14 +1238,14 @@ function addToPromptHistory(prompt) {
 
 function navigatePromptHistory(direction) {
   if (promptHistory.length === 0) return;
-  
+
   if (promptHistoryIndex === -1 && direction === -1) {
     currentPromptBackup = promptInput.value;
   }
-  
+
   const newIndex = promptHistoryIndex + direction;
   if (newIndex < -1 || newIndex >= promptHistory.length) return;
-  
+
   if (newIndex === -1) {
     promptInput.value = currentPromptBackup;
     promptHistoryIndex = -1;
@@ -1185,7 +1254,7 @@ function navigatePromptHistory(direction) {
     promptInput.value = promptHistory[historyIndex];
     promptHistoryIndex = newIndex;
   }
-  
+
   promptInput.selectionStart = promptInput.selectionEnd = promptInput.value.length;
 }
 
@@ -1221,7 +1290,7 @@ function getCurrentSessionUrls() {
       if (url && !url.startsWith('about:')) {
         urls[serviceId] = url;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
   return urls;
 }
@@ -1229,23 +1298,23 @@ function getCurrentSessionUrls() {
 async function saveCurrentSession() {
   const urls = getCurrentSessionUrls();
   if (Object.keys(urls).length === 0) return;
-  
+
   if (sessionHistory.length > 0) {
     const lastUrls = sessionHistory[sessionHistory.length - 1].urls;
     const hasChanged = Object.keys(urls).some(id => urls[id] !== lastUrls[id]) ||
-                       Object.keys(lastUrls).some(id => lastUrls[id] !== urls[id]);
+      Object.keys(lastUrls).some(id => lastUrls[id] !== urls[id]);
     if (!hasChanged) return;
   }
-  
+
   if (sessionHistoryIndex < sessionHistory.length) {
     sessionHistory = sessionHistory.slice(0, sessionHistoryIndex);
   }
-  
+
   sessionHistory.push({ timestamp: new Date().toISOString(), urls });
   if (sessionHistory.length > MAX_SESSION_HISTORY) {
     sessionHistory = sessionHistory.slice(-MAX_SESSION_HISTORY);
   }
-  
+
   sessionHistoryIndex = sessionHistory.length;
   await saveSessionHistory();
 }
@@ -1253,7 +1322,7 @@ async function saveCurrentSession() {
 function navigateSessionHistory(direction) {
   const newIndex = sessionHistoryIndex + direction;
   if (newIndex < 0 || newIndex > sessionHistory.length) return;
-  
+
   if (sessionHistoryIndex === sessionHistory.length && direction === -1) {
     const currentUrls = getCurrentSessionUrls();
     if (Object.keys(currentUrls).length > 0) {
@@ -1261,12 +1330,12 @@ function navigateSessionHistory(direction) {
       saveSessionHistory();
     }
   }
-  
+
   sessionHistoryIndex = newIndex;
   if (newIndex < sessionHistory.length) {
     loadSession(sessionHistory[newIndex]);
   }
-  
+
   updateSessionNavButtons();
 }
 
@@ -1285,14 +1354,14 @@ function loadSession(session) {
 function updateSessionNavButtons() {
   const backBtn = document.getElementById('session-back-btn');
   const forwardBtn = document.getElementById('session-forward-btn');
-  
+
   if (backBtn) {
     backBtn.disabled = sessionHistoryIndex <= 0;
-    backBtn.title = sessionHistoryIndex > 0 
+    backBtn.title = sessionHistoryIndex > 0
       ? `${I18N.t('msgSessionPrev')} (${sessionHistoryIndex}/${sessionHistory.length})`
       : I18N.t('msgNoSessionPrev');
   }
-  
+
   if (forwardBtn) {
     forwardBtn.disabled = sessionHistoryIndex >= sessionHistory.length;
     forwardBtn.title = sessionHistoryIndex < sessionHistory.length
@@ -1304,7 +1373,7 @@ function updateSessionNavButtons() {
 // INTERNATIONALISIERUNG
 function updateUILanguage() {
   promptInput.placeholder = I18N.t('promptPlaceholder');
-  
+
   const buttons = {
     'paste-image-button': I18N.t('tooltipPasteImage'),
     'send-button': I18N.t('tooltipSend'),
@@ -1315,12 +1384,12 @@ function updateUILanguage() {
     'refresh-all': I18N.t('tooltipRefresh'),
     'language-btn': I18N.t('tooltipLanguage')
   };
-  
+
   Object.entries(buttons).forEach(([id, title]) => {
     const btn = document.getElementById(id);
     if (btn) btn.title = title;
   });
-  
+
   if (document.getElementById('vote-check-btn')) {
     document.getElementById('vote-check-btn').textContent = I18N.t('btnVote');
   }
@@ -1330,27 +1399,27 @@ function updateUILanguage() {
   if (document.getElementById('language-btn')) {
     document.getElementById('language-btn').textContent = I18N.getCurrentFlag();
   }
-  
+
   const convBtn = document.getElementById('conversation-mode-toggle');
   if (convBtn) {
-      convBtn.title = I18N.t('tooltipConversation'); // Assuming a key exists or will be added
-      if (conversationMode) {
-          convBtn.textContent = '✓ ' + I18N.t('btnConversation');
-      } else {
-          convBtn.textContent = '💬 ' + I18N.t('btnConversation');
-      }
+    convBtn.title = I18N.t('tooltipConversation'); // Assuming a key exists or will be added
+    if (conversationMode) {
+      convBtn.textContent = '✓ ' + I18N.t('btnConversation');
+    } else {
+      convBtn.textContent = '💬 ' + I18N.t('btnConversation');
+    }
   }
-  
+
   document.querySelectorAll('.layout-btn').forEach(btn => {
     const layout = btn.dataset.layout;
     const titles = { grid: 'tooltipGrid', horizontal: 'tooltipHorizontal', vertical: 'tooltipVertical' };
     if (titles[layout]) btn.title = I18N.t(titles[layout]);
   });
-  
+
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     el.title = I18N.t(el.dataset.i18nTitle);
   });
-  
+
   updateSessionNavButtons();
 }
 
@@ -1375,7 +1444,7 @@ function toggleConversationMode() {
 
   if (conversationMode) {
     // --- ENTERING CONVERSATION MODE ---
-    
+
     // 1. Save current state
     previousLayout = {
       activeServices: [...userSettings.activeServices],
@@ -1393,17 +1462,17 @@ function toggleConversationMode() {
 
     // 3. Hide ALL service webviews initially
     config.services.forEach(service => {
-        const container = document.getElementById(`${service.id}-container`);
-        if (container) {
-            container.classList.add('hidden');
-        }
+      const container = document.getElementById(`${service.id}-container`);
+      if (container) {
+        container.classList.add('hidden');
+      }
     });
-    
+
     console.log('[ConversationMode] Activated - showing control panel.');
 
   } else {
     // --- EXITING CONVERSATION MODE ---
-    
+
     // 1. Hide conversation panel & update UI
     panel.classList.add('hidden');
     toggleBtn.classList.remove('active');
@@ -1415,16 +1484,16 @@ function toggleConversationMode() {
     if (conversationController && conversationController.getState() !== 'IDLE' && conversationController.getState() !== 'COMPLETED') {
       conversationController.stop();
     }
-    
+
     // 3. Hide and remove conversation webviews
     // Hide active conversation services
     if (conversationServiceA) {
-        const container = document.getElementById(`${conversationServiceA.id}-container`);
-        if (container) container.classList.add('hidden');
+      const container = document.getElementById(`${conversationServiceA.id}-container`);
+      if (container) container.classList.add('hidden');
     }
     if (conversationServiceB) {
-        const container = document.getElementById(`${conversationServiceB.id}-container`);
-        if (container) container.classList.add('hidden');
+      const container = document.getElementById(`${conversationServiceB.id}-container`);
+      if (container) container.classList.add('hidden');
     }
 
     // Remove dynamically created instances
@@ -1438,28 +1507,28 @@ function toggleConversationMode() {
         console.log(`[ConversationMode] Cleaned up dynamic instance: ${id}`);
       }
     });
-    
+
     // 4. Restore previous state if available
     if (previousLayout) {
       userSettings.activeServices = [...previousLayout.activeServices];
       applyLayout(previousLayout.layout);
-      
+
       // Restore focus if it was active
       if (previousLayout.focused) {
-          enterFocus(previousLayout.focused);
+        enterFocus(previousLayout.focused);
       }
       previousLayout = null;
     }
-    
+
     // 5. Explicitly set visibility for all base services based on the restored state
     config.services.forEach(service => {
-        const container = document.getElementById(`${service.id}-container`);
-        if (container) {
-            const shouldBeVisible = userSettings.activeServices.includes(service.id);
-            container.classList.toggle('hidden', !shouldBeVisible);
-        }
+      const container = document.getElementById(`${service.id}-container`);
+      if (container) {
+        const shouldBeVisible = userSettings.activeServices.includes(service.id);
+        container.classList.toggle('hidden', !shouldBeVisible);
+      }
     });
-    
+
     // 6. Restore UI elements
     buildStatusBar(); // Re-build to restore checkboxes and states
     updateGridCount();
@@ -1519,9 +1588,9 @@ function loadServices() {
 
   // Hide all services first to ensure a clean state
   document.querySelectorAll('.webview-container[data-service]').forEach(container => {
-      if(container.id !== 'conversation-panel-container') {
-        container.classList.add('hidden');
-      }
+    if (container.id !== 'conversation-panel-container') {
+      container.classList.add('hidden');
+    }
   });
 
   if (serviceAId === serviceBId) {
@@ -1531,18 +1600,18 @@ function loadServices() {
     conversationServiceA = config.services.find(s => s.id === serviceAId);
     conversationServiceB = config.services.find(s => s.id === serviceBId);
     if (!conversationServiceA || !conversationServiceB) {
-        alert('Fehler beim Laden der Services!');
-        return;
+      alert('Fehler beim Laden der Services!');
+      return;
     }
     conversationServiceIds = [serviceAId, serviceBId];
   }
 
   // Make only the two selected services visible
   conversationServiceIds.forEach(id => {
-      const container = document.getElementById(`${id}-container`);
-      if (container) {
-          container.classList.remove('hidden');
-      }
+    const container = document.getElementById(`${id}-container`);
+    if (container) {
+      container.classList.remove('hidden');
+    }
   });
 
   // Enable start button and allow reloading
