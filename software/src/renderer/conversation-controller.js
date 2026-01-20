@@ -57,6 +57,7 @@ class ConversationController {
     this.onTurnComplete = options.onTurnComplete || (() => {});
     this.onError = options.onError || (() => {});
     this.onComplete = options.onComplete || (() => {});
+    this.onCountdownUpdate = options.onCountdownUpdate || (() => {}); // ADDED
 
     console.log('[ConversationController] Initialized with options:', options);
   }
@@ -154,9 +155,9 @@ class ConversationController {
 
         if (this.currentTurn >= this.maxTurns || this.shouldStop) break;
 
-        // Wait delay before next turn
+        // Wait delay before next turn (this is the delay between turns, not for response)
         this.setState(States.PROCESSING);
-        await window.ResponseMonitor.sleep(this.turnDelay);
+        await window.ResponseMonitor.sleep(1000); // Shorter static delay between turns
 
         // Send Service A's response to Service B
         await this.sendMessage(this.serviceB.id, this.webviewB, responseA);
@@ -192,7 +193,7 @@ class ConversationController {
 
         // Wait delay before next turn
         this.setState(States.PROCESSING);
-        await window.ResponseMonitor.sleep(this.turnDelay);
+        await window.ResponseMonitor.sleep(1000); // Shorter static delay
 
         // Send Service B's response back to Service A
         await this.sendMessage(this.serviceA.id, this.webviewA, responseB);
@@ -243,15 +244,39 @@ class ConversationController {
     }
   }
 
+  // ADDED
+  /**
+   * Sleep function that triggers a countdown callback
+   */
+  async sleepWithCountdown(duration, tickCallback) {
+    let remaining = Math.ceil(duration / 1000);
+    tickCallback(remaining); // Initial display
+
+    const interval = setInterval(() => {
+      remaining--;
+      if (remaining >= 0) {
+        tickCallback(remaining);
+      }
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    await window.ResponseMonitor.sleep(duration);
+    clearInterval(interval); // Ensure cleared in case of timing mismatch
+    tickCallback(0); // Final clear
+  }
+
   /**
    * Wait for response and extract it
    */
   async waitAndExtractResponse(serviceId, webview, service) {
-    console.log(`[ConversationController] Waiting for fixed delay for ${serviceId}: ${this.turnDelay}ms`);
+    const waitDuration = this.turnDelay; // Using the main delay for waiting
+    console.log(`[ConversationController] Waiting for fixed delay for ${serviceId}: ${waitDuration}ms`);
 
     try {
-      // Simple fixed delay instead of complex monitoring
-      await window.ResponseMonitor.sleep(this.turnDelay);
+      // Use sleep with countdown
+      await this.sleepWithCountdown(waitDuration, this.onCountdownUpdate);
 
       console.log(`[ConversationController] Fixed delay finished for ${serviceId}. Extracting response.`);
 
@@ -282,15 +307,15 @@ class ConversationController {
       (function() {
         const selectors = ${JSON.stringify(service.responseSelectors)};
         let responseText = '';
-        // Use the last selector that matches, but combine text from all its elements.
+        // Use the last selector that matches, and get text from the last element found.
         for (const selector of selectors) {
           const elements = document.querySelectorAll(selector);
           if (elements.length > 0) {
-            let combinedText = '';
-            for (const el of elements) {
-                combinedText += el.textContent;
+            // Instead of combining all, get the last element's text.
+            const lastElement = elements[elements.length - 1];
+            if (lastElement) {
+              responseText = lastElement.textContent;
             }
-            responseText = combinedText;
           }
         }
         return responseText.trim();
@@ -305,7 +330,7 @@ class ConversationController {
    * (Uses the robust version from renderer.js)
    */
   createInjectionScript(service, text) {
-    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\`').replace(/\$/g, '\\$');
     const editorType = service.editorType || 'default';
 
     // Helper functions to be injected, same as in renderer.js
@@ -365,7 +390,7 @@ class ConversationController {
     // The main script, assembled from the helpers
     return `
       (async function() {
-        const text = \`${escapedText}\`;
+        const text = `${escapedText}`;
         const inputSelectors = ${JSON.stringify(service.inputSelectors)};
         const submitSelectors = ${JSON.stringify(service.submitSelectors)};
         
@@ -519,7 +544,9 @@ class ConversationController {
       filename += '.json';
     } else if (format === 'txt') {
       content = this.transcript.map(entry => {
-        return `[${entry.timestamp}] ${entry.speaker}:\n${entry.message}\n`;
+        return `[${entry.timestamp}] ${entry.speaker}:
+${entry.message}
+`;
       }).join('\n---\n\n');
       filename += '.txt';
     } else if (format === 'markdown') {
@@ -550,6 +577,11 @@ class ConversationController {
     this.state = newState;
     console.log(`[ConversationController] State: ${oldState} -> ${newState}`);
     this.onStateChange(newState, oldState);
+
+    // ADDED: Clear countdown when not waiting
+    if (newState !== States.WAITING_FOR_A && newState !== States.WAITING_FOR_B) {
+        this.onCountdownUpdate(0);
+    }
   }
 
   /**

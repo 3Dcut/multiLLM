@@ -193,6 +193,7 @@ function buildWebViews() {
       <!-- Status Display -->
       <div id="conversation-status">
         <span class="status-indicator" id="conv-state">IDLE</span>
+        <span id="conv-countdown"></span>
         <span id="conv-turn-info">Turn: 0/20</span>
         <span id="conv-direction">—</span>
       </div>
@@ -1413,12 +1414,24 @@ function toggleConversationMode() {
       conversationController.stop();
     }
     
-    // 3. Hide all conversation-related webviews
+    // 3. REMOVE all dynamically created conversation webviews
+    Object.keys(webviews).forEach(id => {
+      if (id.endsWith('-a') || id.endsWith('-b')) {
+        const container = document.getElementById(`${id}-container`);
+        if (container) {
+          container.remove();
+        }
+        delete webviews[id];
+        console.log(`[ConversationMode] Cleaned up dynamic instance: ${id}`);
+      }
+    });
+    
+    // 4. Un-hide all other webviews (will be filtered by restore step)
     document.querySelectorAll('.webview-container').forEach(container => {
         container.classList.remove('hidden-by-conversation-mode');
     });
 
-    // 4. Restore previous state
+    // 5. Restore previous state
     if (previousLayout) {
       userSettings.activeServices = [...previousLayout.activeServices];
       applyLayout(previousLayout.layout);
@@ -1444,7 +1457,7 @@ function toggleConversationMode() {
       previousLayout = null;
     }
     
-    // 5. Restore UI elements
+    // 6. Restore UI elements
     buildStatusBar(); // Re-build to restore checkboxes and states
     updateGridCount();
     statusBar.classList.remove('hidden-by-conversation-mode');
@@ -1460,7 +1473,7 @@ function initializeConversationController() {
   }
 
   const maxTurns = parseInt(document.getElementById('max-turns').value) || 20;
-  const turnDelay = parseFloat(document.getElementById('turn-delay').value) * 1000 || 3000;
+  const turnDelay = parseFloat(document.getElementById('turn-delay').value) * 1000 || 30000;
   const responseTimeout = parseInt(document.getElementById('response-timeout').value) * 1000 || 60000;
 
   conversationController = new window.ConversationController({
@@ -1470,7 +1483,13 @@ function initializeConversationController() {
     onStateChange: handleConversationStateChange,
     onTurnComplete: handleConversationTurnComplete,
     onError: handleConversationError,
-    onComplete: handleConversationComplete
+    onComplete: handleConversationComplete,
+    onCountdownUpdate: (remaining) => {
+      const el = document.getElementById('conv-countdown');
+      if (el) {
+        el.textContent = remaining > 0 ? `(${remaining}s)` : '';
+      }
+    }
   });
 
   console.log('[ConversationMode] Controller initialized');
