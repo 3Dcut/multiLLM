@@ -1332,6 +1332,16 @@ function updateUILanguage() {
     document.getElementById('language-btn').textContent = I18N.getCurrentFlag();
   }
   
+  const convBtn = document.getElementById('conversation-mode-toggle');
+  if (convBtn) {
+      convBtn.title = I18N.t('tooltipConversation'); // Assuming a key exists or will be added
+      if (conversationMode) {
+          convBtn.textContent = '✓ ' + I18N.t('btnConversation');
+      } else {
+          convBtn.textContent = '💬 ' + I18N.t('btnConversation');
+      }
+  }
+  
   document.querySelectorAll('.layout-btn').forEach(btn => {
     const layout = btn.dataset.layout;
     const titles = { grid: 'tooltipGrid', horizontal: 'tooltipHorizontal', vertical: 'tooltipVertical' };
@@ -1493,6 +1503,7 @@ function loadServices() {
     const serviceId = container.dataset.service;
     if (serviceId && conversationServiceIds.includes(serviceId)) {
       container.classList.remove('hidden-by-conversation-mode');
+      container.classList.remove('hidden'); // Also remove the generic hidden class
     } else if (serviceId) {
       container.classList.add('hidden-by-conversation-mode');
     }
@@ -1800,4 +1811,9 @@ window.compareAll = compareAll;
 window.evaluateYesNo = evaluateYesNo;
 
 promptInput.focus();
-init();
+// init(); // Don't call directly, wait for signal from main process
+
+window.electronAPI.onConfigReady(() => {
+  console.log('Received config-ready signal from main process. Initializing renderer...');
+  init();
+});

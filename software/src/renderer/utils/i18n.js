@@ -33,10 +33,12 @@ const I18N = {
       tooltipSessionForward: 'Nächste Session',
       tooltipRefresh: 'Neue Sitzung starten',
       tooltipLanguage: 'Sprache wechseln',
+      tooltipConversation: 'Konversationsmodus aktivieren/deaktivieren',
       
       // Buttons
       btnVote: '🗳️ Vote',
       btnCompare: '⚖️ Vergleichen',
+      btnConversation: 'Konversation',
       btnVoteLoading: '⏳ Prüfe...',
       btnCompareLoading: '⏳ Sammle...',
       
@@ -62,7 +64,7 @@ const I18N = {
       msgNoSessionPrev: 'Keine vorherige Session',
       msgMinServices: 'Mindestens 2 Services müssen Antworten haben.',
       msgNoImage: 'Kein Bild in der Zwischenablage gefunden!',
-      msgClipboardError: 'Fehler beim Zugriff auf die Zwischenablage',
+      msgClipboardError: 'Fout bij toegang tot klembord',
       msgCopyFailed: 'Kopieren fehlgeschlagen',
       msgNoResponseFrom: 'Keine Antwort von {service} gefunden.',
       
@@ -112,9 +114,11 @@ Welche Antwort ist am besten und warum?
       tooltipSessionForward: 'Next session',
       tooltipRefresh: 'Start new session',
       tooltipLanguage: 'Change language',
+      tooltipConversation: 'Activate/deactivate Conversation Mode',
       
       btnVote: '🗳️ Vote',
       btnCompare: '⚖️ Compare',
+      btnConversation: 'Conversation',
       btnVoteLoading: '⏳ Checking...',
       btnCompareLoading: '⏳ Collecting...',
       
@@ -187,6 +191,7 @@ Which response is best and why?
       
       btnVote: '🗳️ Stem',
       btnCompare: '⚖️ Vergelijken',
+      btnConversation: 'Gesprek',
       btnVoteLoading: '⏳ Controleren...',
       btnCompareLoading: '⏳ Verzamelen...',
       

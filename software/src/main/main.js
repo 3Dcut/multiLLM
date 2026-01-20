@@ -190,6 +190,13 @@ ipcMain.handle('set-language', (event, lang) => {
 app.whenReady().then(() => {
   ensureConfigFiles();
   createWindow();
+
+  // Signal renderer that config is ready after the window has loaded its content
+  if (mainWindow) {
+    mainWindow.webContents.on('did-finish-load', () => {
+      mainWindow.webContents.send('config-ready');
+    });
+  }
 });
 
 app.on('window-all-closed', () => {

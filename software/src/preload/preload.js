@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
   readFile: (filename) => ipcRenderer.invoke('read-file', filename),
   writeFile: (filename, data) => ipcRenderer.invoke('write-file', filename, data),
-  setLanguage: (lang) => ipcRenderer.invoke('set-language', lang)
+  setLanguage: (lang) => ipcRenderer.invoke('set-language', lang),
+  onConfigReady: (callback) => ipcRenderer.on('config-ready', (_event, ...args) => callback(...args))
 });
