@@ -1596,16 +1596,18 @@ function initializeConversationController() {
     onTurnComplete: handleConversationTurnComplete,
     onError: handleConversationError,
     onComplete: handleConversationComplete,
-    onCountdownUpdate: (seconds) => {
+    onCountdownUpdate: (seconds, average) => {
       const countdownEl = document.getElementById('conv-countdown');
-      const skipBtn = document.getElementById('skip-countdown');
+      const delayControls = document.getElementById('delay-controls');
+      const avgValEl = document.getElementById('avg-delay-val');
 
       if (seconds > 0) {
         if (countdownEl) countdownEl.textContent = `(Wartezeit: ${seconds}s)`;
-        if (skipBtn) skipBtn.style.display = 'inline-block';
+        if (delayControls) delayControls.style.display = 'flex';
+        if (avgValEl && average) avgValEl.textContent = average;
       } else {
         if (countdownEl) countdownEl.textContent = '';
-        if (skipBtn) skipBtn.style.display = 'none';
+        if (delayControls) delayControls.style.display = 'none';
       }
     }
   });
