@@ -1470,8 +1470,7 @@ function toggleConversationMode() {
 
 function initializeConversationController() {
   if (!window.ConversationController) {
-    console.error('[ConversationMode] ConversationController not available');
-    return;
+    throw new Error('ConversationController class is not available. The script conversation-controller.js might not have loaded correctly or failed to execute.');
   }
 
   const maxTurns = parseInt(document.getElementById('max-turns').value) || 20;
@@ -1582,10 +1581,6 @@ function startConversation() {
     try {
       // Initialize controller with fresh settings
       initializeConversationController();
-      
-      if (!conversationController) {
-          throw new Error("Conversation Controller object could not be created.");
-      }
 
       // Initialize conversation
       conversationController.initialize(conversationServiceA, conversationServiceB, webviewA, webviewB);
