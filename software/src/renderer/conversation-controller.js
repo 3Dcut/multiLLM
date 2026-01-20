@@ -327,7 +327,6 @@ class ConversationController {
     const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
       element.focus();
       ${wait(100)}
-
       if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
         element.value = text;
         element.dispatchEvent(new Event('input', { bubbles: true }));
@@ -335,7 +334,9 @@ class ConversationController {
         console.log('[${serviceId}] Set textarea value');
         return true;
       }
-
+      
+      // This is the actual fix: defining editorType inside the injected script
+      const editorType = '${editorType}';
       const isQuill = editorType === 'quill' || element.classList.contains('ql-editor');
       const isProseMirror = editorType === 'prosemirror' || element.classList.contains('ProseMirror');
       const isLexical = editorType === 'lexical' || element.hasAttribute('data-lexical-editor');
