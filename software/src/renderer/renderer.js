@@ -1388,14 +1388,14 @@ function toggleConversationMode() {
     panel.classList.remove('hidden');
     toggleBtn.classList.add('active');
     toggleBtn.textContent = '✓ ' + I18N.t('btnConversation');
-    statusBar.classList.add('hidden-by-conversation-mode');
+    statusBar.classList.add('hidden');
     webviewGrid.classList.add('conversation-mode-active');
 
     // 3. Hide ALL service webviews initially
     config.services.forEach(service => {
         const container = document.getElementById(`${service.id}-container`);
         if (container) {
-            container.classList.add('hidden-by-conversation-mode');
+            container.classList.add('hidden');
         }
     });
     
@@ -1409,14 +1409,25 @@ function toggleConversationMode() {
     toggleBtn.classList.remove('active');
     toggleBtn.textContent = '💬 ' + I18N.t('btnConversation');
     webviewGrid.classList.remove('conversation-mode-active');
-    statusBar.classList.remove('hidden-by-conversation-mode');
+    statusBar.classList.remove('hidden');
 
     // 2. Stop any running conversation
     if (conversationController && conversationController.getState() !== 'IDLE' && conversationController.getState() !== 'COMPLETED') {
       conversationController.stop();
     }
     
-    // 3. Remove dynamically created conversation webviews
+    // 3. Hide and remove conversation webviews
+    // Hide active conversation services
+    if (conversationServiceA) {
+        const container = document.getElementById(`${conversationServiceA.id}-container`);
+        if (container) container.classList.add('hidden');
+    }
+    if (conversationServiceB) {
+        const container = document.getElementById(`${conversationServiceB.id}-container`);
+        if (container) container.classList.add('hidden');
+    }
+
+    // Remove dynamically created instances
     Object.keys(webviews).forEach(id => {
       if (id.endsWith('-a') || id.endsWith('-b')) {
         const container = document.getElementById(`${id}-container`);
@@ -1446,7 +1457,6 @@ function toggleConversationMode() {
         if (container) {
             const shouldBeVisible = userSettings.activeServices.includes(service.id);
             container.classList.toggle('hidden', !shouldBeVisible);
-            container.classList.remove('hidden-by-conversation-mode'); // Clean up class
         }
     });
     
@@ -1511,7 +1521,7 @@ function loadServices() {
   // Hide all services first to ensure a clean state
   document.querySelectorAll('.webview-container[data-service]').forEach(container => {
       if(container.id !== 'conversation-panel-container') {
-        container.classList.add('hidden-by-conversation-mode');
+        container.classList.add('hidden');
       }
   });
 
@@ -1532,7 +1542,7 @@ function loadServices() {
   conversationServiceIds.forEach(id => {
       const container = document.getElementById(`${id}-container`);
       if (container) {
-          container.classList.remove('hidden-by-conversation-mode', 'hidden');
+          container.classList.remove('hidden');
       }
   });
 
