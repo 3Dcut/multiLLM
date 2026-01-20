@@ -392,7 +392,8 @@ class ConversationController {
    * (Uses the robust version from renderer.js)
    */
   createInjectionScript(service, text) {
-    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\`').replace(/\$/g, '\\$');
+    // Fix: Properly escape backticks for the template literal
+    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
     const editorType = service.editorType || 'default';
 
     // Helper functions to be injected, same as in renderer.js
@@ -686,3 +687,4 @@ ${entry.message}
 // Export for use in renderer (make globally available)
 window.ConversationController = ConversationController;
 window.ConversationStates = States;
+console.log('[ConversationController] Script loaded successfully and class exposed to window.');
