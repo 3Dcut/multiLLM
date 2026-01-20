@@ -47,63 +47,7 @@ function setButtonFeedback(selector, emoji, original, delay = 1000) {
   }
 }
 
-// Helper: Wartefunktion für Scripts
-const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
 
-// Helper: Gemeinsame findElement-Funktion für Scripts
-const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
-  for (const selector of selectors) {
-    try {
-      const el = document.querySelector(selector);
-      if (el) {
-        ${log ? `console.log('[${serviceId}] Found with selector:', selector);` : ''}
-        return el;
-      }
-    } catch (e) {}
-  }
-  return null;
-}`;
-
-// Helper: Gemeinsame Editor-Insertion-Logik
-const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
-  element.focus();
-  ${wait(100)}
-  
-  // Textarea/Input
-  if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
-    element.value = text;
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[${serviceId}] Set textarea value');
-    return true;
-  }
-  
-  // Editor-spezifische Behandlung
-  const editorType = '${editorType}';
-  const isQuill = editorType === 'quill' || element.classList.contains('ql-editor');
-  const isProseMirror = editorType === 'prosemirror' || element.classList.contains('ProseMirror');
-  const isLexical = editorType === 'lexical' || element.hasAttribute('data-lexical-editor');
-  
-  if (isQuill || isProseMirror || isLexical || element.isContentEditable) {
-    if (isProseMirror) {
-      console.log('[${serviceId}] Using ProseMirror insertion');
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(element);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    } else {
-      document.execCommand('selectAll', false, null);
-    }
-    document.execCommand('delete', false, null);
-    ${wait(50)}
-    document.execCommand('insertText', false, text);
-    element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-    return true;
-  }
-  
-  return false;
-}`;
 
 // Initialisierung
 async function init() {
@@ -364,52 +308,106 @@ async function saveSettings() {
 function createInjectionScript(service, text) {
   const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
   const editorType = service.editorType || 'default';
-  
+
+  // Helper functions to be injected, same as in conversation-controller.js
+  const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
+
+  const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
+    for (const selector of selectors) {
+      try {
+        const el = document.querySelector(selector);
+        if (el) {
+          ${log ? `console.log('[${serviceId}] Found with selector:', selector);` : ''}
+          return el;
+        }
+      } catch (e) {}
+    }
+    return null;
+  }`;
+
+  const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
+    element.focus();
+    ${wait(100)}
+    if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+      element.value = text;
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+      console.log('[${serviceId}] Set textarea value');
+      return true;
+    }
+    
+    // This is the actual fix: defining editorType inside the injected script
+    const editorType = '${editorType}';
+    const isQuill = editorType === 'quill' || element.classList.contains('ql-editor');
+    const isProseMirror = editorType === 'prosemirror' || element.classList.contains('ProseMirror');
+    const isLexical = editorType === 'lexical' || element.hasAttribute('data-lexical-editor');
+
+    if (isQuill || isProseMirror || isLexical || element.isContentEditable) {
+      if (isProseMirror) {
+        console.log('[${serviceId}] Using ProseMirror insertion');
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      } else {
+        document.execCommand('selectAll', false, null);
+      }
+      document.execCommand('delete', false, null);
+      ${wait(50)}
+      document.execCommand('insertText', false, text);
+      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      return true;
+    }
+
+    return false;
+  }`;
+
+  // The main script, assembled from the helpers
   return `
     (async function() {
       const text = \`${escapedText}\`;
       const inputSelectors = ${JSON.stringify(service.inputSelectors)};
       const submitSelectors = ${JSON.stringify(service.submitSelectors)};
-      const editorType = '${editorType}';
       
       console.log('[${service.id}] Starting injection...');
-      
+
       ${findElementFn(service.id, true)}
       ${insertTextFn(service.id, editorType)}
-      
+
       let inputEl = findElement(inputSelectors);
       if (!inputEl) {
-        ${wait(1500)} // Increased from 1000
+        ${wait(1500)}
         inputEl = findElement(inputSelectors);
       }
-      
+
       if (!inputEl) {
         console.error('[${service.id}] Input not found!');
         return { success: false, error: 'Input not found' };
       }
-      
+
       await insertText(inputEl, text);
-      ${wait(1000)} // Increased from 500
-      
+      ${wait(1000)}
+
       let submitBtn = null;
       for (let i = 0; i < 10; i++) {
         submitBtn = findElement(submitSelectors);
         if (submitBtn && !submitBtn.disabled) break;
-        ${wait(300)} // Increased from 200
+        ${wait(300)}
         submitBtn = null;
       }
-      
+
       if (submitBtn && !submitBtn.disabled) {
         submitBtn.click();
         console.log('[${service.id}] Clicked submit');
         return { success: true, method: 'button' };
       }
-      
+
       console.log('[${service.id}] Trying Enter key');
       inputEl.dispatchEvent(new KeyboardEvent('keydown', {
         key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
       }));
-      
+
       return { success: true, method: 'enter' };
     })();
   `;
