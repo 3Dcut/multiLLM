@@ -251,7 +251,7 @@ Sub CreateSetupScript()
     File.WriteLine ""
     File.WriteLine "$localTs = Get-LocalTimestamp"
     File.WriteLine "$isFirstInstall = -not (Test-Path (Join-Path $SoftwareDir 'src\main\main.js'))"
-    File.WriteLine "    File.WriteLine "$remoteDate = $null"
+    File.WriteLine "$remoteDate = $null"
     File.WriteLine "if ($remote.date) { $remoteDate = [DateTime]$remote.date }"
     File.WriteLine "$localDate = [DateTime]::MinValue"
     File.WriteLine "if ($localTs -ne '') { try { $localDate = [DateTime]$localTs } catch {} }"
