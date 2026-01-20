@@ -53,11 +53,11 @@ class ConversationController {
     this.shouldStop = false;
 
     // Callbacks
-    this.onStateChange = options.onStateChange || (() => {});
-    this.onTurnComplete = options.onTurnComplete || (() => {});
-    this.onError = options.onError || (() => {});
-    this.onComplete = options.onComplete || (() => {});
-    this.onCountdownUpdate = options.onCountdownUpdate || (() => {}); // ADDED
+    this.onStateChange = options.onStateChange || (() => { });
+    this.onTurnComplete = options.onTurnComplete || (() => { });
+    this.onError = options.onError || (() => { });
+    this.onComplete = options.onComplete || (() => { });
+    this.onCountdownUpdate = options.onCountdownUpdate || (() => { }); // ADDED
 
     console.log('[ConversationController] Initialized with options:', options);
   }
@@ -79,13 +79,15 @@ class ConversationController {
   /**
    * Start conversation with initial prompt
    */
-  async start(initialPrompt) {
+  async start(initialPrompt, roleA = null, roleB = null) {
     if (this.state !== States.IDLE && this.state !== States.COMPLETED) {
       console.warn('[ConversationController] Cannot start - not in IDLE or COMPLETED state');
       return;
     }
 
     console.log('[ConversationController] Starting conversation with prompt:', initialPrompt);
+    if (roleA) console.log('[ConversationController] Role A:', roleA.substring(0, 50) + '...');
+    if (roleB) console.log('[ConversationController] Role B:', roleB.substring(0, 50) + '...');
 
     // Reset state
     this.currentTurn = 0;
@@ -98,10 +100,34 @@ class ConversationController {
 
     this.setState(States.INITIALIZING);
 
-    // Add initial prompt to transcript
-    this.addToTranscript('user', initialPrompt, 0);
-
     try {
+      let sentRole = false;
+
+      // Send Role A
+      if (roleA && roleA.trim()) {
+        console.log('[ConversationController] Sending Role A');
+        await this.sendMessage(this.serviceA.id, this.webviewA, roleA);
+        sentRole = true;
+        await window.ResponseMonitor.sleep(1000); // Short buffer
+      }
+
+      // Send Role B
+      if (roleB && roleB.trim()) {
+        console.log('[ConversationController] Sending Role B');
+        await this.sendMessage(this.serviceB.id, this.webviewB, roleB);
+        sentRole = true;
+        await window.ResponseMonitor.sleep(1000); // Short buffer
+      }
+
+      // If roles were sent, wait for countdown
+      if (sentRole) {
+        console.log('[ConversationController] Roles transmitted. Waiting for countdown...');
+        await this.sleepWithCountdown(this.turnDelay, this.onCountdownUpdate);
+      }
+
+      // Add initial prompt to transcript
+      this.addToTranscript('user', initialPrompt, 0);
+
       // Send initial prompt to Service A
       await this.sendMessage(this.serviceA.id, this.webviewA, initialPrompt);
 
@@ -580,7 +606,7 @@ ${entry.message}
 
     // ADDED: Clear countdown when not waiting
     if (newState !== States.WAITING_FOR_A && newState !== States.WAITING_FOR_B) {
-        this.onCountdownUpdate(0);
+      this.onCountdownUpdate(0);
     }
   }
 

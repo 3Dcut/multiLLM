@@ -61,6 +61,14 @@ async function init() {
     userSettings = await window.electronAPI.getUserSettings();
     console.log('DEBUG: User settings loaded:', userSettings);
 
+    // Initialize default roles if not present
+    if (!userSettings.conversationRoles) {
+      userSettings.conversationRoles = {
+        roleA: "Du führst ein Interview mit einem Experten zum Thema '{topic}'. Stelle immer genau eine Frage. Warte auf die Antwort. Sei kritisch aber höflich.",
+        roleB: "Du wirst als Experte zum Thema '{topic}' interviewt. Antworte präzise auf die Fragen des Interviewers. Fasse dich kurz."
+      };
+    }
+
     console.log('Config loaded:', config.services.length, 'services');
 
     if (userSettings.language && I18N.translations[userSettings.language]) {
@@ -143,7 +151,7 @@ function buildWebViews() {
       </div>
     </div>
     <div id="conversation-panel-content">
-      <div class="conversation-controls">
+        <div class="conversation-controls">
         <!-- Service Selection -->
         <div class="service-selection">
           <label for="service-a-select">
@@ -168,6 +176,15 @@ function buildWebViews() {
               <option value="mistral">Mistral Le Chat</option>
             </select>
           </label>
+        </div>
+
+        <!-- Role Configuration -->
+        <div class="role-configuration">
+            <label for="role-a-input">Rolle A:</label>
+            <textarea id="role-a-input" rows="2" placeholder="Systeminstruktion für Service A..."></textarea>
+            
+            <label for="role-b-input">Rolle B:</label>
+            <textarea id="role-b-input" rows="2" placeholder="Systeminstruktion für Service B..."></textarea>
         </div>
 
         <!-- Initial Prompt -->
@@ -1485,6 +1502,12 @@ function toggleConversationMode() {
 
     console.log('[ConversationMode] Activated - showing control panel.');
 
+    // 4. Populate Role Inputs
+    if (userSettings.conversationRoles) {
+      document.getElementById('role-a-input').value = userSettings.conversationRoles.roleA || '';
+      document.getElementById('role-b-input').value = userSettings.conversationRoles.roleB || '';
+    }
+
   } else {
     // --- EXITING CONVERSATION MODE ---
 
@@ -1675,7 +1698,21 @@ function startConversation() {
       document.getElementById('stop-conversation').disabled = false;
 
       // Start conversation
-      conversationController.start(initialPrompt);
+      const roleAInput = document.getElementById('role-a-input').value;
+      const roleBInput = document.getElementById('role-b-input').value;
+
+      // Save updated roles
+      userSettings.conversationRoles = {
+        roleA: roleAInput,
+        roleB: roleBInput
+      };
+      saveSettings();
+
+      // Process roles (replace placeholder)
+      const roleA = roleAInput.replace('{topic}', initialPrompt);
+      const roleB = roleBInput.replace('{topic}', initialPrompt);
+
+      conversationController.start(initialPrompt, roleA, roleB);
 
       console.log('[ConversationMode] Started:', conversationServiceA.name, '<->', conversationServiceB.name);
     } catch (error) {
