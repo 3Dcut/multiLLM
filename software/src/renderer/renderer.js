@@ -1481,40 +1481,43 @@ function initializeConversationController() {
 function loadServices() {
   const serviceAId = document.getElementById('service-a-select').value;
   const serviceBId = document.getElementById('service-b-select').value;
+  let conversationServiceIds;
 
   console.log('[ConversationMode] Loading services:', serviceAId, serviceBId);
 
-  if (serviceAId === serviceBId) {
-    alert('Bitte wähle zwei verschiedene Services aus.');
-    return;
-  }
-  
-  conversationServiceA = config.services.find(s => s.id === serviceAId);
-  conversationServiceB = config.services.find(s => s.id === serviceBId);
-
-  if (!conversationServiceA || !conversationServiceB) {
-    alert('Fehler beim Laden der Services!');
-    return;
-  }
-  
-  // Make only the two selected services visible
-  const conversationServiceIds = [serviceAId, serviceBId];
-  document.querySelectorAll('.webview-container').forEach(container => {
-    const serviceId = container.dataset.service;
-    if (serviceId && conversationServiceIds.includes(serviceId)) {
-      container.classList.remove('hidden-by-conversation-mode');
-      container.classList.remove('hidden'); // Also remove the generic hidden class
-    } else if (serviceId) {
-      container.classList.add('hidden-by-conversation-mode');
-    }
+  // Hide all services first to ensure a clean state
+  document.querySelectorAll('.webview-container[data-service]').forEach(container => {
+      if(container.id !== 'conversation-panel-container') {
+        container.classList.add('hidden-by-conversation-mode');
+      }
   });
 
+  if (serviceAId === serviceBId) {
+    setupDualServiceInstances(serviceAId);
+    conversationServiceIds = [conversationServiceA.id, conversationServiceB.id];
+  } else {
+    conversationServiceA = config.services.find(s => s.id === serviceAId);
+    conversationServiceB = config.services.find(s => s.id === serviceBId);
+    if (!conversationServiceA || !conversationServiceB) {
+        alert('Fehler beim Laden der Services!');
+        return;
+    }
+    conversationServiceIds = [serviceAId, serviceBId];
+  }
 
-  // Enable start button after a short delay to allow webviews to become visible
+  // Make only the two selected services visible
+  conversationServiceIds.forEach(id => {
+      const container = document.getElementById(`${id}-container`);
+      if (container) {
+          container.classList.remove('hidden-by-conversation-mode', 'hidden');
+      }
+  });
+
+  // Enable start button and allow reloading
   setTimeout(() => {
     document.getElementById('start-conversation').disabled = false;
-    document.getElementById('load-services').textContent = '✓ Services Loaded';
-    document.getElementById('load-services').disabled = true;
+    document.getElementById('load-services').textContent = '🔄 Reload Services';
+    document.getElementById('load-services').disabled = false; // Keep it enabled
     console.log('[ConversationMode] Services loaded and ready');
   }, 1000);
 }
@@ -1601,6 +1604,7 @@ function createConversationWebview(service, badge) {
   const container = document.createElement('div');
   container.className = 'webview-container';
   container.id = `${service.id}-container`;
+  container.dataset.service = service.id;
 
   // Create header
   const header = document.createElement('div');

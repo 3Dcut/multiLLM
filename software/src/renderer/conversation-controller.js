@@ -254,11 +254,15 @@ class ConversationController {
       const detectionResult = await window.ResponseMonitor.waitForResponse(webview, service, this.responseTimeout);
 
       if (!detectionResult.success) {
-        console.warn(`[ConversationController] Response detection failed for ${serviceId}: ${detectionResult.method}`);
+        throw new Error(`Response detection failed for ${serviceId} using method ${detectionResult.method}.`);
       }
 
       // Extract response text
       const responseText = await this.extractResponse(webview, service);
+
+      if (!responseText) {
+        throw new Error(`Extracted empty response from ${serviceId}.`);
+      }
 
       console.log(`[ConversationController] Extracted response from ${serviceId}:`, responseText.substring(0, 100));
 

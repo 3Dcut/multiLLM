@@ -1,12 +1,12 @@
 {
-  "serviceA": "perplexity",
-  "serviceB": "mistral",
-  "startTime": "2026-01-20T12:20:24.413Z",
-  "endTime": "2026-01-20T12:20:24.413Z",
+  "serviceA": "mistral",
+  "serviceB": "perplexity",
+  "startTime": "2026-01-20T14:01:33.237Z",
+  "endTime": "2026-01-20T14:01:33.237Z",
   "turns": 0,
   "messages": [
     {
-      "timestamp": "2026-01-20T12:20:24.413Z",
+      "timestamp": "2026-01-20T14:01:33.237Z",
       "speaker": "user",
       "message": "test",
       "turn": 0
