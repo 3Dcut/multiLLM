@@ -1268,3 +1268,42 @@ webview {
   flex-direction: column;
   gap: 16px;
 }
+
+/* Role Inputs */
+.role-configuration {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-configuration label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8a8aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#role-a-input, #role-b-input {
+  background: #0d0d1a;
+  border: 1px solid #3a3a5a;
+  border-radius: 6px;
+  padding: 10px;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+  min-height: 60px;
+}
+
+#role-a-input:focus, #role-b-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+#role-a-input::placeholder, #role-b-input::placeholder {
+  color: #6a6a8a;
+  font-style: italic;
+}
