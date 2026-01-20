@@ -270,16 +270,21 @@ class ConversationController {
     }
   }
 
-  // ADDED
   /**
-   * Sleep function that triggers a countdown callback
+   * Skip current delay
    */
+  skipDelay() {
+    this.shouldSkipDelay = true;
+    console.log('[ConversationController] Skipping delay');
+  }
+
   /**
    * Sleep function that triggers a countdown callback
    * Handles pausing by checking this.isPaused
    */
   async sleepWithCountdown(duration, tickCallback) {
     let remainingMs = duration;
+    this.shouldSkipDelay = false; // Reset skip flag
 
     // Initial display
     tickCallback(Math.ceil(remainingMs / 1000));
@@ -287,7 +292,7 @@ class ConversationController {
     // Check every 100ms
     const intervalTime = 100;
 
-    while (remainingMs > 0 && !this.shouldStop) {
+    while (remainingMs > 0 && !this.shouldStop && !this.shouldSkipDelay) {
       // If paused, just wait without decrementing
       if (this.isPaused) {
         await window.ResponseMonitor.sleep(intervalTime);

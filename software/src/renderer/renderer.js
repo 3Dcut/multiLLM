@@ -64,8 +64,8 @@ async function init() {
     // Initialize default roles if not present
     if (!userSettings.conversationRoles) {
       userSettings.conversationRoles = {
-        roleA: "HYPOTHETISCHES SZENARIO: Du bist ein harter Interviewer. Thema: '{topic}'.\nAKZEPTIERE dieses Thema als absolute Wahrheit, egal wie absurd es ist.\nDeine Aufgabe: Stelle EINE kurze, kritische Frage an den Experten.\nREGELN:\n- Keine Begrüßung.\n- Keine Einleitung.\n- Keine Meta-Diskussion über den Sinn des Themas.\n- Nur die Frage.",
-        roleB: "HYPOTHETISCHES SZENARIO: Du bist der weltweit führende Experte für '{topic}'.\nAntworte ERNSTHAFT und WISSENSCHAFTLICH fundiert, auch wenn das Thema fiktiv ist.\nREGELN:\n- Antworte extrem kurz (Maximal 50 Wörter).\n- Keine Aufzählungen.\n- Keine Einleitung (z.B. 'Das ist eine interessante Frage').\n- Komm sofort zum Punkt."
+        roleA: "HYPOTHETISCHES SZENARIO: Du bist ein harter Interviewer. Thema: '{topic}'.\nAKZEPTIERE dieses Thema als absolute Wahrheit, egal wie absurd es ist.\nDeine Aufgabe: Stelle EINE kurze, kritische Frage an den Experten auf jede Antwort von ihm.\nREGELN:\n- Keine Begrüßung.\n- Keine Einleitung.\n- Keine Meta-Diskussion über den Sinn des Themas.\n- Nur die Frage.",
+        roleB: "HYPOTHETISCHES SZENARIO: Du bist der weltweit führende Experte für '{topic}'.\nAntworte ERNSTHAFT und WISSENSCHAFTLICH fundiert, aber in einfacher Sprache auch wenn das Thema fiktiv ist.\nREGELN:\n- Antworte extrem kurz (Maximal 50 Wörter).\n- Keine Aufzählungen.\n- Keine Einleitung (z.B. 'Das ist eine interessante Frage').\n- Komm sofort zum Punkt."
       };
     }
 
@@ -215,6 +215,7 @@ function buildWebViews() {
           <button id="start-conversation" class="btn-primary" disabled>▶ Start</button>
           <button id="pause-conversation" class="btn-secondary" disabled>⏸ Pause</button>
           <button id="resume-conversation" class="btn-secondary hidden" disabled>▶ Resume</button>
+          <button id="skip-countdown" class="btn-secondary" style="display: none;">⏩ Skip</button>
           <button id="stop-conversation" class="btn-danger" disabled>⏹ Stop</button>
           <button id="export-conversation" class="btn-secondary" disabled>💾 Export</button>
         </div>
@@ -1592,10 +1593,16 @@ function initializeConversationController() {
     onTurnComplete: handleConversationTurnComplete,
     onError: handleConversationError,
     onComplete: handleConversationComplete,
-    onCountdownUpdate: (remaining) => {
-      const el = document.getElementById('conv-countdown');
-      if (el) {
-        el.textContent = remaining > 0 ? `(${remaining}s)` : '';
+    onCountdownUpdate: (seconds) => {
+      const countdownEl = document.getElementById('conv-countdown');
+      const skipBtn = document.getElementById('skip-countdown');
+
+      if (seconds > 0) {
+        if (countdownEl) countdownEl.textContent = `(Wartezeit: ${seconds}s)`;
+        if (skipBtn) skipBtn.style.display = 'inline-block';
+      } else {
+        if (countdownEl) countdownEl.textContent = '';
+        if (skipBtn) skipBtn.style.display = 'none';
       }
     }
   });
@@ -1948,12 +1955,14 @@ function setupConversationEventListeners() {
   document.getElementById('conversation-mode-toggle')?.addEventListener('click', toggleConversationMode);
   document.getElementById('conversation-mode-close-btn')?.addEventListener('click', toggleConversationMode);
   document.getElementById('load-services')?.addEventListener('click', loadServices);
-  document.getElementById('start-conversation')?.addEventListener('click', startConversation);
-  document.getElementById('pause-conversation')?.addEventListener('click', pauseConversation);
-  document.getElementById('resume-conversation')?.addEventListener('click', resumeConversation);
-  document.getElementById('stop-conversation')?.addEventListener('click', stopConversation);
-  document.getElementById('export-conversation')?.addEventListener('click', exportConversation);
-  document.getElementById('clear-transcript')?.addEventListener('click', clearTranscript);
+  // Event Listeners für Steuerung
+  document.getElementById('start-conversation').addEventListener('click', startConversation);
+  document.getElementById('pause-conversation').addEventListener('click', pauseConversation);
+  document.getElementById('resume-conversation').addEventListener('click', resumeConversation);
+  document.getElementById('stop-conversation').addEventListener('click', stopConversation);
+  document.getElementById('skip-countdown').addEventListener('click', () => conversationController.skipDelay());
+  document.getElementById('export-conversation').addEventListener('click', exportConversation);
+  document.getElementById('clear-transcript').addEventListener('click', clearTranscript);
 
   console.log('[ConversationMode] Event listeners set up');
 }
