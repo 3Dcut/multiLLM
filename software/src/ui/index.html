@@ -53,11 +53,12 @@
         <button id="compare-all-btn" title="Alle KIs vergleichen lassen">⚖️ Vergleichen</button>
       </div>
       
-      <!-- RECHTS: Session-Navigation + Sprache + Neue Sitzung -->
+      <!-- RECHTS: Session-Navigation + Sprache + Neue Sitzung + Conversation Mode -->
       <div id="toolbar-right">
         <button id="session-back-btn" title="Vorherige Session" disabled>◀</button>
         <button id="session-forward-btn" title="Nächste Session" disabled>▶</button>
         <button id="language-btn" title="Sprache wechseln">🇩🇪</button>
+        <button id="conversation-mode-toggle" title="Conversation Mode aktivieren">💬 Conversation</button>
         <button id="refresh-all" title="Neue Sitzung starten">🔄</button>
       </div>
     </div>
@@ -70,6 +71,8 @@
 
   <script src="../renderer/utils/i18n.js"></script>
   <script src="../renderer/utils/vote-patterns.js"></script>
+  <script src="../renderer/utils/response-monitor.js"></script>
+  <script src="../renderer/conversation-controller.js"></script>
   <script src="../renderer/renderer.js"></script>
 </body>
 </html>

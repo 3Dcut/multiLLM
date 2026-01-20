@@ -6,6 +6,13 @@ let mutedServices = new Set();
 let focusedService = null;
 let previousLayout = null;
 
+// Conversation Mode State
+let conversationMode = false;
+let conversationController = null;
+let conversationServiceA = null;
+let conversationServiceB = null;
+let conversationServices = [];  // [serviceIdA, serviceIdB] - für Tab-Hiding
+
 // Prompt History (↑/↓ Tasten)
 let promptHistory = [];
 let promptHistoryIndex = -1;
@@ -123,9 +130,10 @@ async function init() {
     buildStatusBar();
     buildWebViews();
     applyLayout(userSettings.layout);
-    
+
     console.log('DEBUG: Setting up event listeners...');
     setupEventListeners();
+    setupConversationEventListeners();
     console.log('DEBUG: Event listeners set up!');
     
     updateUILanguage();
@@ -165,14 +173,108 @@ function buildStatusBar() {
 function buildWebViews() {
   webviewGrid.innerHTML = '';
   webviews = {};
-  
+
+  // Create Conversation Panel Container (as first grid item)
+  const convContainer = document.createElement('div');
+  convContainer.className = 'webview-container conversation-panel-container hidden';
+  convContainer.id = 'conversation-panel-container';
+  convContainer.innerHTML = `
+    <div class="webview-header" style="border-left: 3px solid #ff6b6b">
+      <span class="service-name">💬 Conversation Control</span>
+      <div class="header-buttons">
+        <button id="conversation-mode-close-btn" title="Conversation Mode schließen">✕</button>
+      </div>
+    </div>
+    <div id="conversation-panel-content">
+      <div class="conversation-controls">
+        <!-- Service Selection -->
+        <div class="service-selection">
+          <label for="service-a-select">
+            <span class="service-label">Service A:</span>
+            <select id="service-a-select">
+              <option value="copilot">Microsoft Copilot</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="chatgpt">ChatGPT</option>
+              <option value="perplexity">Perplexity</option>
+              <option value="mistral">Mistral Le Chat</option>
+            </select>
+          </label>
+          <label for="service-b-select">
+            <span class="service-label">Service B:</span>
+            <select id="service-b-select">
+              <option value="copilot" selected>Microsoft Copilot</option>
+              <option value="claude">Claude</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="chatgpt">ChatGPT</option>
+              <option value="perplexity">Perplexity</option>
+              <option value="mistral">Mistral Le Chat</option>
+            </select>
+          </label>
+        </div>
+
+        <!-- Initial Prompt -->
+        <div class="initial-prompt-container">
+          <label for="initial-prompt">Gesprächsthema:</label>
+          <input type="text" id="initial-prompt" placeholder="z.B. Diskutiert über künstliche Intelligenz..." />
+        </div>
+
+        <!-- Conversation Settings -->
+        <div class="conversation-settings">
+          <label for="max-turns">
+            <span>Max. Turns:</span>
+            <input type="number" id="max-turns" value="20" min="1" max="100" />
+          </label>
+          <label for="turn-delay">
+            <span>Verzögerung (s):</span>
+            <input type="number" id="turn-delay" value="3" min="1" max="30" step="0.5" />
+          </label>
+          <label for="response-timeout">
+            <span>Timeout (s):</span>
+            <input type="number" id="response-timeout" value="60" min="10" max="300" />
+          </label>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="conversation-buttons">
+          <button id="load-services" class="btn-secondary">🔄 Load Services</button>
+          <button id="start-conversation" class="btn-primary" disabled>▶ Start</button>
+          <button id="pause-conversation" class="btn-secondary" disabled>⏸ Pause</button>
+          <button id="resume-conversation" class="btn-secondary hidden" disabled>▶ Resume</button>
+          <button id="stop-conversation" class="btn-danger" disabled>⏹ Stop</button>
+          <button id="export-conversation" class="btn-secondary" disabled>💾 Export</button>
+        </div>
+      </div>
+
+      <!-- Status Display -->
+      <div id="conversation-status">
+        <span class="status-indicator" id="conv-state">IDLE</span>
+        <span id="conv-turn-info">Turn: 0/20</span>
+        <span id="conv-direction">—</span>
+      </div>
+
+      <!-- Transcript Display -->
+      <div id="conversation-transcript">
+        <div class="transcript-header">
+          <h4>Conversation Transcript</h4>
+          <button id="clear-transcript" class="btn-small">🗑️ Clear</button>
+        </div>
+        <div id="transcript-content">
+          <div class="transcript-empty">Kein Gespräch aktiv. Klicke auf "Start" um zu beginnen.</div>
+        </div>
+      </div>
+    </div>
+  `;
+  webviewGrid.appendChild(convContainer);
+
+  // Create regular service containers
   config.services.forEach(service => {
     const isActive = userSettings.activeServices.includes(service.id);
     const container = document.createElement('div');
     container.className = `webview-container ${isActive ? '' : 'hidden'}`;
     container.id = `${service.id}-container`;
     container.dataset.service = service.id;
-    
+
     container.innerHTML = `
       <div class="webview-header" style="border-left: 3px solid ${service.color}">
         <span class="service-name">${service.name}</span>
@@ -184,24 +286,24 @@ function buildWebViews() {
           <button class="reload-btn" data-service="${service.id}" data-i18n-title="tooltipReload">↻</button>
         </div>
       </div>
-      <webview 
+      <webview
         id="${service.id}-view"
         src="${service.url}"
         partition="persist:${service.id}"
         allowpopups
       ></webview>
     `;
-    
+
     webviewGrid.appendChild(container);
     const webview = container.querySelector('webview');
     webviews[service.id] = webview;
-    
+
     webview.addEventListener('did-start-loading', () => updateStatus(service.id, 'loading'));
     webview.addEventListener('did-finish-load', () => updateStatus(service.id, 'ready'));
     webview.addEventListener('did-fail-load', () => updateStatus(service.id, 'error'));
     webview.addEventListener('console-message', (e) => console.log(`[${service.id}]`, e.message));
   });
-  
+
   updateGridCount();
 }
 
@@ -1253,6 +1355,453 @@ function reloadWebviewsWithLanguage() {
     }
   });
 }
+
+// ======================== CONVERSATION MODE ========================
+
+function toggleConversationMode() {
+  conversationMode = !conversationMode;
+
+  const panel = document.getElementById('conversation-panel-container');
+  const toggleBtn = document.getElementById('conversation-mode-toggle');
+
+  if (conversationMode) {
+    // Save current state
+    previousLayout = {
+      activeServices: [...userSettings.activeServices],
+      layout: userSettings.layout
+    };
+
+    // Show conversation panel
+    panel.classList.remove('hidden');
+    toggleBtn.classList.add('active');
+    toggleBtn.textContent = '✓ Conversation';
+
+    // Hide all normal service tabs
+    document.querySelectorAll('.webview-container').forEach(container => {
+      if (container.id !== 'conversation-panel-container') {
+        container.classList.add('hidden-conversation-mode');
+      }
+    });
+
+    // Hide status bar
+    document.querySelectorAll('.status-item').forEach(item => {
+      item.style.display = 'none';
+    });
+
+    console.log('[ConversationMode] Activated - only showing conversation control');
+  } else {
+    // Hide conversation panel
+    panel.classList.add('hidden');
+    toggleBtn.classList.remove('active');
+    toggleBtn.textContent = '💬 Conversation';
+    webviewGrid.classList.remove('conversation-mode');
+
+    // Restore all services to previous state
+    showAllServices();
+
+    // Restore previous active services
+    if (previousLayout) {
+      userSettings.activeServices = [...previousLayout.activeServices];
+      applyLayout(previousLayout.layout);
+      previousLayout = null;
+    }
+
+    // Stop conversation if running
+    if (conversationController && conversationController.getState() !== 'IDLE' && conversationController.getState() !== 'COMPLETED') {
+      conversationController.stop();
+    }
+
+    console.log('[ConversationMode] Deactivated - restored previous state');
+  }
+}
+
+function initializeConversationController() {
+  if (!window.ConversationController) {
+    console.error('[ConversationMode] ConversationController not available');
+    return;
+  }
+
+  const maxTurns = parseInt(document.getElementById('max-turns').value) || 20;
+  const turnDelay = parseFloat(document.getElementById('turn-delay').value) * 1000 || 3000;
+  const responseTimeout = parseInt(document.getElementById('response-timeout').value) * 1000 || 60000;
+
+  conversationController = new window.ConversationController({
+    maxTurns,
+    turnDelay,
+    responseTimeout,
+    onStateChange: handleConversationStateChange,
+    onTurnComplete: handleConversationTurnComplete,
+    onError: handleConversationError,
+    onComplete: handleConversationComplete
+  });
+
+  console.log('[ConversationMode] Controller initialized');
+}
+
+function loadServices() {
+  const serviceAId = document.getElementById('service-a-select').value;
+  const serviceBId = document.getElementById('service-b-select').value;
+
+  console.log('[ConversationMode] Loading services:', serviceAId, serviceBId);
+
+  if (serviceAId === serviceBId) {
+    // Create duplicate instances
+    setupDualServiceInstances(serviceAId);
+  } else {
+    // Use different services
+    conversationServiceA = config.services.find(s => s.id === serviceAId);
+    conversationServiceB = config.services.find(s => s.id === serviceBId);
+  }
+
+  if (!conversationServiceA || !conversationServiceB) {
+    alert('Fehler beim Laden der Services!');
+    return;
+  }
+
+  // Show service tabs
+  hideNonConversationServices();
+
+  // Enable start button after services are loaded
+  setTimeout(() => {
+    document.getElementById('start-conversation').disabled = false;
+    document.getElementById('load-services').textContent = '✓ Services Loaded';
+    document.getElementById('load-services').disabled = true;
+    console.log('[ConversationMode] Services loaded and ready');
+  }, 1000);
+}
+
+function startConversation() {
+  const initialPrompt = document.getElementById('initial-prompt').value.trim();
+
+  if (!initialPrompt) {
+    alert('Bitte gib ein Gesprächsthema ein!');
+    return;
+  }
+
+  if (!conversationServiceA || !conversationServiceB) {
+    alert('Bitte lade zuerst die Services mit dem "Load Services" Button!');
+    return;
+  }
+
+  // Initialize controller with fresh settings
+  initializeConversationController();
+
+  // Get webviews
+  const webviewA = webviews[conversationServiceA.id];
+  const webviewB = webviews[conversationServiceB.id];
+
+  if (!webviewA || !webviewB) {
+    alert('Webviews nicht gefunden! Bitte klicke nochmal auf "Load Services".');
+    return;
+  }
+
+  // Wait longer for webviews to be fully ready
+  setTimeout(() => {
+    try {
+      // Initialize conversation
+      conversationController.initialize(conversationServiceA, conversationServiceB, webviewA, webviewB);
+
+      // Update button states
+      document.getElementById('start-conversation').disabled = true;
+      document.getElementById('pause-conversation').disabled = false;
+      document.getElementById('stop-conversation').disabled = false;
+
+      // Start conversation
+      conversationController.start(initialPrompt);
+
+      console.log('[ConversationMode] Started:', conversationServiceA.name, '<->', conversationServiceB.name);
+    } catch (error) {
+      console.error('[ConversationMode] Error starting conversation:', error);
+      alert('Fehler beim Starten der Konversation: ' + error.message);
+    }
+  }, 1000);
+}
+
+function setupDualServiceInstances(baseServiceId) {
+  // Find base service
+  const baseService = config.services.find(s => s.id === baseServiceId);
+
+  if (!baseService) return;
+
+  // Create Service A (clone with -a suffix)
+  conversationServiceA = {
+    ...baseService,
+    id: `${baseServiceId}-a`,
+    name: `${baseService.name} A`
+  };
+
+  // Create Service B (clone with -b suffix)
+  conversationServiceB = {
+    ...baseService,
+    id: `${baseServiceId}-b`,
+    name: `${baseService.name} B`
+  };
+
+  // Check if webviews exist, if not create them
+  if (!webviews[conversationServiceA.id]) {
+    createConversationWebview(conversationServiceA, 'a');
+  }
+
+  if (!webviews[conversationServiceB.id]) {
+    createConversationWebview(conversationServiceB, 'b');
+  }
+}
+
+function createConversationWebview(service, badge) {
+  // Create container
+  const container = document.createElement('div');
+  container.className = 'webview-container';
+  container.id = `${service.id}-container`;
+
+  // Create header
+  const header = document.createElement('div');
+  header.className = 'webview-header';
+
+  const serviceName = document.createElement('span');
+  serviceName.className = 'service-name';
+  serviceName.style.color = service.color;
+  serviceName.textContent = service.name;
+
+  const badgeEl = document.createElement('span');
+  badgeEl.className = `service-badge service-badge-${badge}`;
+  badgeEl.textContent = badge.toUpperCase();
+
+  serviceName.appendChild(badgeEl);
+  header.appendChild(serviceName);
+  container.appendChild(header);
+
+  // Create webview
+  const webview = document.createElement('webview');
+  webview.id = `${service.id}-view`;
+  webview.src = service.url;
+  webview.partition = `persist:${service.id}`;
+  webview.allowpopups = true;
+
+  container.appendChild(webview);
+  webviewGrid.appendChild(container);
+
+  // Store reference
+  webviews[service.id] = webview;
+
+  console.log('[ConversationMode] Created webview for:', service.name);
+}
+
+function hideNonConversationServices() {
+  // Update conversationServices array for CSS-based hiding
+  conversationServices = [conversationServiceA.id, conversationServiceB.id];
+
+  const allContainers = document.querySelectorAll('.webview-container');
+  allContainers.forEach(container => {
+    const id = container.id.replace('-container', '');
+
+    // Keep conversation-panel-container visible
+    if (id === 'conversation-panel') {
+      container.classList.remove('hidden-conversation-mode');
+      return;
+    }
+
+    // Add/remove .conversation-active for CSS-based hiding
+    if (conversationServices.includes(id)) {
+      container.classList.add('conversation-active');
+      container.classList.remove('hidden-conversation-mode');
+    } else {
+      container.classList.remove('conversation-active');
+      container.classList.add('hidden-conversation-mode');
+
+      // Also hide status bar entries for non-conversation services
+      const statusItem = document.querySelector(`.status-item[data-service="${id}"]`);
+      if (statusItem) statusItem.style.display = 'none';
+    }
+  });
+
+  // Ensure status bar entries for conversation services are visible
+  conversationServices.forEach(serviceId => {
+    const statusItem = document.querySelector(`.status-item[data-service="${serviceId}"]`);
+    if (statusItem) statusItem.style.display = '';
+  });
+}
+
+function showAllServices() {
+  // Clear conversation services array
+  conversationServices = [];
+
+  // Remove conversation-related classes and restore visibility
+  document.querySelectorAll('.webview-container').forEach(container => {
+    container.classList.remove('hidden-conversation-mode');
+    container.classList.remove('conversation-active');
+    container.style.display = '';
+  });
+
+  // Restore status bar entries
+  document.querySelectorAll('.status-item').forEach(item => {
+    item.style.display = '';
+  });
+}
+
+function pauseConversation() {
+  if (conversationController) {
+    conversationController.pause();
+    document.getElementById('pause-conversation').classList.add('hidden');
+    document.getElementById('resume-conversation').classList.remove('hidden');
+    document.getElementById('resume-conversation').disabled = false;
+  }
+}
+
+function resumeConversation() {
+  if (conversationController) {
+    conversationController.resume();
+    document.getElementById('resume-conversation').classList.add('hidden');
+    document.getElementById('pause-conversation').classList.remove('hidden');
+  }
+}
+
+function stopConversation() {
+  if (conversationController) {
+    conversationController.stop();
+
+    // Reset button states
+    document.getElementById('start-conversation').disabled = false;
+    document.getElementById('pause-conversation').disabled = true;
+    document.getElementById('stop-conversation').disabled = true;
+    document.getElementById('pause-conversation').classList.remove('hidden');
+    document.getElementById('resume-conversation').classList.add('hidden');
+    document.getElementById('export-conversation').disabled = false;
+  }
+}
+
+async function exportConversation() {
+  if (!conversationController) return;
+
+  // Show format selection dialog
+  const format = await showExportFormatDialog();
+  if (!format) return;
+
+  const { content, filename } = await conversationController.exportTranscript(format);
+
+  // Use Electron API to save file
+  window.electronAPI.writeFile(filename, content)
+    .then(() => {
+      alert(`Transcript exported as ${filename}`);
+    })
+    .catch(error => {
+      console.error('[ConversationMode] Export error:', error);
+      alert('Fehler beim Exportieren des Transcripts!');
+    });
+}
+
+function showExportFormatDialog() {
+  return new Promise((resolve) => {
+    const format = prompt('Export format: json, txt, or markdown?', 'json');
+    if (format && ['json', 'txt', 'markdown'].includes(format.toLowerCase())) {
+      resolve(format.toLowerCase());
+    } else {
+      resolve(null);
+    }
+  });
+}
+
+function clearTranscript() {
+  const transcriptContent = document.getElementById('transcript-content');
+  transcriptContent.innerHTML = '<div class="transcript-empty">Kein Gespräch aktiv. Klicke auf "Start" um zu beginnen.</div>';
+}
+
+function handleConversationStateChange(newState, oldState) {
+  console.log('[ConversationMode] State changed:', oldState, '->', newState);
+
+  const stateEl = document.getElementById('conv-state');
+  stateEl.textContent = newState;
+  stateEl.className = 'status-indicator state-' + newState.toLowerCase().replace(/_/g, '-');
+}
+
+function handleConversationTurnComplete(data) {
+  console.log('[ConversationMode] Turn complete:', data);
+
+  // Update turn info
+  const stats = conversationController.getStats();
+  document.getElementById('conv-turn-info').textContent = `Turn: ${stats.currentTurn}/${stats.maxTurns}`;
+
+  // Update direction indicator
+  const direction = data.speaker === conversationServiceA.id ? 'A → B' : 'B → A';
+  document.getElementById('conv-direction').textContent = direction;
+
+  // Add to transcript display
+  addToTranscriptDisplay(data);
+}
+
+function handleConversationError(error) {
+  console.error('[ConversationMode] Error:', error);
+  alert(`Conversation error: ${error.message || error}`);
+}
+
+function handleConversationComplete(data) {
+  console.log('[ConversationMode] Complete:', data);
+
+  document.getElementById('export-conversation').disabled = false;
+
+  alert(`Conversation completed! Total turns: ${data.turns}`);
+}
+
+function addToTranscriptDisplay(data) {
+  const transcriptContent = document.getElementById('transcript-content');
+
+  // Remove empty message if present
+  const emptyMsg = transcriptContent.querySelector('.transcript-empty');
+  if (emptyMsg) emptyMsg.remove();
+
+  // Create message element
+  const messageEl = document.createElement('div');
+  messageEl.className = 'transcript-message';
+
+  if (data.speaker === 'user') {
+    messageEl.classList.add('speaker-user');
+  } else if (data.speaker === conversationServiceA.id) {
+    messageEl.classList.add('speaker-a');
+  } else if (data.speaker === conversationServiceB.id) {
+    messageEl.classList.add('speaker-b');
+  }
+
+  const header = document.createElement('div');
+  header.className = 'transcript-message-header';
+
+  const speaker = document.createElement('span');
+  speaker.className = 'transcript-speaker';
+  speaker.textContent = data.speaker === 'user' ? 'User' : (data.speaker === conversationServiceA.id ? conversationServiceA.name : conversationServiceB.name);
+
+  const timestamp = document.createElement('span');
+  timestamp.className = 'transcript-timestamp';
+  timestamp.textContent = new Date().toLocaleTimeString();
+
+  header.appendChild(speaker);
+  header.appendChild(timestamp);
+
+  const text = document.createElement('div');
+  text.className = 'transcript-text';
+  text.textContent = data.message.substring(0, 500) + (data.message.length > 500 ? '...' : '');
+
+  messageEl.appendChild(header);
+  messageEl.appendChild(text);
+
+  transcriptContent.appendChild(messageEl);
+
+  // Auto-scroll to bottom
+  transcriptContent.scrollTop = transcriptContent.scrollHeight;
+}
+
+function setupConversationEventListeners() {
+  // Event listeners for conversation mode (called after buildWebViews)
+  document.getElementById('conversation-mode-toggle')?.addEventListener('click', toggleConversationMode);
+  document.getElementById('conversation-mode-close-btn')?.addEventListener('click', toggleConversationMode);
+  document.getElementById('start-conversation')?.addEventListener('click', startConversation);
+  document.getElementById('pause-conversation')?.addEventListener('click', pauseConversation);
+  document.getElementById('resume-conversation')?.addEventListener('click', resumeConversation);
+  document.getElementById('stop-conversation')?.addEventListener('click', stopConversation);
+  document.getElementById('export-conversation')?.addEventListener('click', exportConversation);
+  document.getElementById('clear-transcript')?.addEventListener('click', clearTranscript);
+
+  console.log('[ConversationMode] Event listeners set up');
+}
+
+// ======================== END CONVERSATION MODE ========================
 
 // Expose for debugging
 window.getLastResponse = getLastResponse;
