@@ -133,7 +133,7 @@ class ConversationController {
           this.serviceA
         );
 
-        if (!responseA || this.shouldStop) break;
+        if ((responseA === null || typeof responseA === 'undefined') || this.shouldStop) break;
 
         this.currentTurn++;
         this.addToTranscript(this.serviceA.id, responseA, this.currentTurn);
@@ -169,7 +169,7 @@ class ConversationController {
           this.serviceB
         );
 
-        if (!responseB || this.shouldStop) break;
+        if ((responseB === null || typeof responseB === 'undefined') || this.shouldStop) break;
 
         this.currentTurn++;
         this.addToTranscript(this.serviceB.id, responseB, this.currentTurn);
@@ -247,15 +247,13 @@ class ConversationController {
    * Wait for response and extract it
    */
   async waitAndExtractResponse(serviceId, webview, service) {
-    console.log(`[ConversationController] Waiting for response from ${serviceId}`);
+    console.log(`[ConversationController] Waiting for fixed delay for ${serviceId}: ${this.turnDelay}ms`);
 
     try {
-      // Wait for response to complete
-      const detectionResult = await window.ResponseMonitor.waitForResponse(webview, service, this.responseTimeout);
+      // Simple fixed delay instead of complex monitoring
+      await window.ResponseMonitor.sleep(this.turnDelay);
 
-      if (!detectionResult.success) {
-        throw new Error(`Response detection failed for ${serviceId} using method ${detectionResult.method}.`);
-      }
+      console.log(`[ConversationController] Fixed delay finished for ${serviceId}. Extracting response.`);
 
       // Extract response text
       const responseText = await this.extractResponse(webview, service);

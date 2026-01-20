@@ -171,7 +171,7 @@ function buildWebViews() {
           </label>
           <label for="turn-delay">
             <span>Verzögerung (s):</span>
-            <input type="number" id="turn-delay" value="3" min="1" max="30" step="0.5" />
+            <input type="number" id="turn-delay" value="30" min="1" max="300" step="1" />
           </label>
           <label for="response-timeout">
             <span>Timeout (s):</span>
