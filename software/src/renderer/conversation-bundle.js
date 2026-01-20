@@ -62,7 +62,7 @@ function watchTypingIndicator(webview, service) {
   return new Promise((resolve) => {
     if (!service.typingIndicatorSelectors || service.typingIndicatorSelectors.length === 0) {
       // Strategy not applicable for this service, return a pending promise
-      return new Promise(() => {});
+      return new Promise(() => { });
     }
 
     const checkInterval = 500; // Check every 500ms
@@ -163,7 +163,7 @@ function watchStreamingComplete(webview, service) {
   return new Promise((resolve) => {
     if (!service.streamingCompleteSelectors || service.streamingCompleteSelectors.length === 0) {
       // Strategy not applicable for this service, return a pending promise
-      return new Promise(() => {});
+      return new Promise(() => { });
     }
 
     const checkInterval = 500;
@@ -292,11 +292,11 @@ class ConversationController {
     this.shouldStop = false;
 
     // Callbacks
-    this.onStateChange = options.onStateChange || (() => {});
-    this.onTurnComplete = options.onTurnComplete || (() => {});
-    this.onError = options.onError || (() => {});
-    this.onComplete = options.onComplete || (() => {});
-    this.onCountdownUpdate = options.onCountdownUpdate || (() => {}); // ADDED
+    this.onStateChange = options.onStateChange || (() => { });
+    this.onTurnComplete = options.onTurnComplete || (() => { });
+    this.onError = options.onError || (() => { });
+    this.onComplete = options.onComplete || (() => { });
+    this.onCountdownUpdate = options.onCountdownUpdate || (() => { }); // ADDED
 
     console.log('[ConversationController] Initialized with options:', options);
   }
@@ -629,7 +629,7 @@ class ConversationController {
     // The main script, assembled from the helpers
     return `
       (async function() {
-        const text = `${escapedText}`;
+        const text = \`${escapedText}\`;
         const inputSelectors = ${JSON.stringify(service.inputSelectors)};
         const submitSelectors = ${JSON.stringify(service.submitSelectors)};
         
@@ -819,7 +819,7 @@ ${entry.message}
 
     // ADDED: Clear countdown when not waiting
     if (newState !== States.WAITING_FOR_A && newState !== States.WAITING_FOR_B) {
-        this.onCountdownUpdate(0);
+      this.onCountdownUpdate(0);
     }
   }
 

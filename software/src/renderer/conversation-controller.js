@@ -390,7 +390,7 @@ class ConversationController {
     // The main script, assembled from the helpers
     return `
       (async function() {
-        const text = `${escapedText}`;
+        const text = \`${escapedText}\`;
         const inputSelectors = ${JSON.stringify(service.inputSelectors)};
         const submitSelectors = ${JSON.stringify(service.submitSelectors)};
         
