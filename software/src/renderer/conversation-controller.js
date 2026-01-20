@@ -260,8 +260,8 @@ class ConversationController {
       // Extract response text
       const responseText = await this.extractResponse(webview, service);
 
-      if (!responseText) {
-        throw new Error(`Extracted empty response from ${serviceId}.`);
+      if (responseText === null || typeof responseText === 'undefined') {
+        throw new Error(`Extracted null or undefined response from ${serviceId}.`);
       }
 
       console.log(`[ConversationController] Extracted response from ${serviceId}:`, responseText.substring(0, 100));

@@ -122,17 +122,19 @@ function watchDOMStability(webview, service) {
         const script = `
           (function() {
             const selectors = ${JSON.stringify(service.responseSelectors)};
-            const responses = [];
-
+            let responseText = '';
+            // Use the last selector that matches, but combine text from all its elements.
             for (const selector of selectors) {
               const elements = document.querySelectorAll(selector);
               if (elements.length > 0) {
-                const lastElement = elements[elements.length - 1];
-                responses.push(lastElement.textContent);
+                let combinedText = '';
+                for (const el of elements) {
+                    combinedText += el.textContent;
+                }
+                responseText = combinedText;
               }
             }
-
-            return responses.length > 0 ? responses[responses.length - 1] : '';
+            return responseText;
           })();
         `;
 
