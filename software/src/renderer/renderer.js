@@ -1374,6 +1374,8 @@ function toggleConversationMode() {
   const toggleBtn = document.getElementById('conversation-mode-toggle');
 
   if (conversationMode) {
+    // --- ENTERING CONVERSATION MODE ---
+    
     // 1. Save current state
     previousLayout = {
       activeServices: [...userSettings.activeServices],
@@ -1382,39 +1384,39 @@ function toggleConversationMode() {
     };
     if (focusedService) exitFocus(); // Exit focus mode if active
 
-    // 2. Show conversation panel ONLY
+    // 2. Show conversation panel and hide status bar
     panel.classList.remove('hidden');
     toggleBtn.classList.add('active');
     toggleBtn.textContent = '✓ ' + I18N.t('btnConversation');
-
-    // 3. Hide ALL service webviews
-    document.querySelectorAll('.webview-container').forEach(container => {
-      if (container.id !== 'conversation-panel-container') {
-        container.classList.add('hidden-by-conversation-mode');
-      }
-    });
-    
-    // Hide status bar toggles
     statusBar.classList.add('hidden-by-conversation-mode');
     webviewGrid.classList.add('conversation-mode-active');
+
+    // 3. Hide ALL service webviews initially
+    config.services.forEach(service => {
+        const container = document.getElementById(`${service.id}-container`);
+        if (container) {
+            container.classList.add('hidden-by-conversation-mode');
+        }
+    });
     
     console.log('[ConversationMode] Activated - showing control panel.');
 
   } else {
     // --- EXITING CONVERSATION MODE ---
     
-    // 1. Hide conversation panel
+    // 1. Hide conversation panel & update UI
     panel.classList.add('hidden');
     toggleBtn.classList.remove('active');
     toggleBtn.textContent = '💬 ' + I18N.t('btnConversation');
     webviewGrid.classList.remove('conversation-mode-active');
+    statusBar.classList.remove('hidden-by-conversation-mode');
 
     // 2. Stop any running conversation
     if (conversationController && conversationController.getState() !== 'IDLE' && conversationController.getState() !== 'COMPLETED') {
       conversationController.stop();
     }
     
-    // 3. REMOVE all dynamically created conversation webviews
+    // 3. Remove dynamically created conversation webviews
     Object.keys(webviews).forEach(id => {
       if (id.endsWith('-a') || id.endsWith('-b')) {
         const container = document.getElementById(`${id}-container`);
@@ -1426,41 +1428,31 @@ function toggleConversationMode() {
       }
     });
     
-    // 4. Un-hide all other webviews (will be filtered by restore step)
-    document.querySelectorAll('.webview-container').forEach(container => {
-        container.classList.remove('hidden-by-conversation-mode');
-    });
-
-    // 5. Restore previous state
+    // 4. Restore previous state if available
     if (previousLayout) {
       userSettings.activeServices = [...previousLayout.activeServices];
       applyLayout(previousLayout.layout);
-      
-      // Restore active services by hiding inactive ones
-      const allServiceIds = config.services.map(s => s.id);
-      allServiceIds.forEach(id => {
-          const container = document.getElementById(`${id}-container`);
-          if (container) {
-              if (userSettings.activeServices.includes(id)) {
-                  container.classList.remove('hidden');
-              } else {
-                  container.classList.add('hidden');
-              }
-          }
-      });
       
       // Restore focus if it was active
       if (previousLayout.focused) {
           enterFocus(previousLayout.focused);
       }
-
       previousLayout = null;
     }
+    
+    // 5. Explicitly set visibility for all base services based on the restored state
+    config.services.forEach(service => {
+        const container = document.getElementById(`${service.id}-container`);
+        if (container) {
+            const shouldBeVisible = userSettings.activeServices.includes(service.id);
+            container.classList.toggle('hidden', !shouldBeVisible);
+            container.classList.remove('hidden-by-conversation-mode'); // Clean up class
+        }
+    });
     
     // 6. Restore UI elements
     buildStatusBar(); // Re-build to restore checkboxes and states
     updateGridCount();
-    statusBar.classList.remove('hidden-by-conversation-mode');
 
     console.log('[ConversationMode] Deactivated - restored previous state.');
   }
@@ -1566,9 +1558,6 @@ function startConversation() {
     return;
   }
 
-  // Initialize controller with fresh settings
-  initializeConversationController();
-
   // Get webviews
   const webviewA = webviews[conversationServiceA.id];
   const webviewB = webviews[conversationServiceB.id];
@@ -1581,6 +1570,13 @@ function startConversation() {
   // Wait longer for webviews to be fully ready
   setTimeout(() => {
     try {
+      // Initialize controller with fresh settings
+      initializeConversationController();
+      
+      if (!conversationController) {
+          throw new Error("Conversation Controller object could not be created.");
+      }
+
       // Initialize conversation
       conversationController.initialize(conversationServiceA, conversationServiceB, webviewA, webviewB);
 
