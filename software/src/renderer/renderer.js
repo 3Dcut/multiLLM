@@ -215,7 +215,7 @@ function buildWebViews() {
           <button id="start-conversation" class="btn-primary" disabled>▶ Start</button>
           <button id="pause-conversation" class="btn-secondary" disabled>⏸ Pause</button>
           <button id="resume-conversation" class="btn-secondary hidden" disabled>▶ Resume</button>
-          <div id="delay-controls" style="display: none; align-items: center; gap: 5px;">
+          <div id="delay-controls" style="display: flex; align-items: center; gap: 5px;">
              <button id="skip-countdown" class="btn-secondary">⏩ Skip</button>
              <button id="set-avg-delay" class="btn-secondary" title="Setze Verzögerung auf Durchschnitt">⏱ Set Delay (<span id="avg-delay-val">0</span>s)</button>
           </div>
