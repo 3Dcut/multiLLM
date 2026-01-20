@@ -302,91 +302,111 @@ class ConversationController {
 
   /**
    * Create injection script for sending messages
-   * (Adapted from renderer.js)
+   * (Uses the robust version from renderer.js)
    */
   createInjectionScript(service, text) {
-    return `
-      (async function() {
-        const editorType = "${service.editorType}";
-        const inputSelectors = ${JSON.stringify(service.inputSelectors)};
-        const submitSelectors = ${JSON.stringify(service.submitSelectors)};
-        const text = ${JSON.stringify(text)};
+    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const editorType = service.editorType || 'default';
 
-        // Find input element
-        let inputElement = null;
-        for (const selector of inputSelectors) {
-          const elements = document.querySelectorAll(selector);
-          if (elements.length > 0) {
-            inputElement = elements[elements.length - 1];
-            break;
+    // Helper functions to be injected, same as in renderer.js
+    const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
+
+    const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
+      for (const selector of selectors) {
+        try {
+          const el = document.querySelector(selector);
+          if (el) {
+            ${log ? `console.log('[${serviceId}] Found with selector:', selector);` : ''}
+            return el;
           }
-        }
+        } catch (e) {}
+      }
+      return null;
+    }`;
 
-        if (!inputElement) {
-          return { success: false, error: 'Input element not found' };
-        }
+    const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
+      element.focus();
+      ${wait(100)}
 
-        // Insert text based on editor type
-        if (editorType === 'prosemirror') {
-          inputElement.focus();
+      if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+        element.value = text;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        console.log('[${serviceId}] Set textarea value');
+        return true;
+      }
+
+      const isQuill = editorType === 'quill' || element.classList.contains('ql-editor');
+      const isProseMirror = editorType === 'prosemirror' || element.classList.contains('ProseMirror');
+      const isLexical = editorType === 'lexical' || element.hasAttribute('data-lexical-editor');
+
+      if (isQuill || isProseMirror || isLexical || element.isContentEditable) {
+        if (isProseMirror) {
+          console.log('[${serviceId}] Using ProseMirror insertion');
           const selection = window.getSelection();
           const range = document.createRange();
-          range.selectNodeContents(inputElement);
-          range.collapse(false);
+          range.selectNodeContents(element);
           selection.removeAllRanges();
           selection.addRange(range);
-          document.execCommand('insertText', false, text);
-        } else if (editorType === 'quill') {
-          inputElement.focus();
-          document.execCommand('insertText', false, text);
-        } else if (editorType === 'lexical') {
-          inputElement.focus();
-          document.execCommand('insertText', false, text);
         } else {
-          // Default: textarea or contenteditable
-          if (inputElement.tagName.toLowerCase() === 'textarea' || inputElement.tagName.toLowerCase() === 'input') {
-            inputElement.value = text;
-            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-          } else {
-            inputElement.textContent = text;
-            inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-            inputElement.dispatchEvent(new Event('change', { bubbles: true }));
-          }
+          document.execCommand('selectAll', false, null);
+        }
+        document.execCommand('delete', false, null);
+        ${wait(50)}
+        document.execCommand('insertText', false, text);
+        element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        return true;
+      }
+
+      return false;
+    }`;
+
+    // The main script, assembled from the helpers
+    return `
+      (async function() {
+        const text = \`${escapedText}\`;
+        const inputSelectors = ${JSON.stringify(service.inputSelectors)};
+        const submitSelectors = ${JSON.stringify(service.submitSelectors)};
+        
+        console.log('[${service.id}] Starting conversation injection...');
+
+        ${findElementFn(service.id, true)}
+        ${insertTextFn(service.id, editorType)}
+
+        let inputEl = findElement(inputSelectors);
+        if (!inputEl) {
+          ${wait(1500)}
+          inputEl = findElement(inputSelectors);
         }
 
-        // Wait a bit for the input to register
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Find and click submit button
-        let submitButton = null;
-        for (const selector of submitSelectors) {
-          const buttons = document.querySelectorAll(selector);
-          for (const btn of buttons) {
-            const style = window.getComputedStyle(btn);
-            if (style.display !== 'none' && style.visibility !== 'hidden' && !btn.disabled) {
-              submitButton = btn;
-              break;
-            }
-          }
-          if (submitButton) break;
+        if (!inputEl) {
+          console.error('[${service.id}] Input not found for conversation!');
+          return { success: false, error: 'Input not found' };
         }
 
-        if (submitButton) {
-          submitButton.click();
+        await insertText(inputEl, text);
+        ${wait(1000)}
+
+        let submitBtn = null;
+        for (let i = 0; i < 10; i++) {
+          submitBtn = findElement(submitSelectors);
+          if (submitBtn && !submitBtn.disabled) break;
+          ${wait(300)}
+          submitBtn = null;
+        }
+
+        if (submitBtn && !submitBtn.disabled) {
+          submitBtn.click();
+          console.log('[${service.id}] Clicked submit');
           return { success: true, method: 'button' };
-        } else {
-          // Fallback: press Enter
-          const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true
-          });
-          inputElement.dispatchEvent(enterEvent);
-          return { success: true, method: 'enter' };
         }
+
+        console.log('[${service.id}] Trying Enter key');
+        inputEl.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+        }));
+
+        return { success: true, method: 'enter' };
       })();
     `;
   }

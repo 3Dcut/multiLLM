@@ -17,7 +17,6 @@
         "#m365-chat-input-shared-container button[type=\"submit\"]",
         "#m365-chat-input-shared-container button[aria-label*=\"Send\"]",
         "#m365-chat-input-shared-container button[aria-label*=\"Senden\"]",
-        "[class*=\"fai-ChatInput\"] button",
         "[class*=\"ChatInput\"] button[type=\"submit\"]"
       ],
       "responseSelectors": [
