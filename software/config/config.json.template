@@ -16,7 +16,6 @@
         "#m365-chat-input-shared-container button[type=\"submit\"]",
         "#m365-chat-input-shared-container button[aria-label*=\"Send\"]",
         "#m365-chat-input-shared-container button[aria-label*=\"Senden\"]",
-        "[class*=\"fai-ChatInput\"] button",
         "[class*=\"ChatInput\"] button[type=\"submit\"]"
       ],
       "responseSelectors": [
@@ -52,7 +51,6 @@
       "submitSelectors": [
         "button[aria-label=\"Send Message\"]",
         "button[aria-label=\"Nachricht senden\"]",
-        "fieldset button[type=\"button\"]",
         "[data-testid=\"composer-send-button\"]"
       ],
       "responseSelectors": [
@@ -190,10 +188,9 @@
         "[data-placeholder*=\"Frage\"] .ProseMirror"
       ],
       "submitSelectors": [
-        "button[type=\"submit\"][aria-label*=\"Send\"]",
-        "button[type=\"submit\"][aria-label*=\"Senden\"]",
         "button[aria-label=\"Send question\"]",
-        "button[type=\"submit\"]"
+        "button[type=\"submit\"][aria-label*=\"Send\"]",
+        "button[type=\"submit\"][aria-label*=\"Senden\"]"
       ],
       "responseSelectors": [
         "[data-message-author-role='assistant'] .markdown-container-style",

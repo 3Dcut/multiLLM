@@ -379,7 +379,7 @@ function createInjectionScript(service, text) {
       
       let inputEl = findElement(inputSelectors);
       if (!inputEl) {
-        ${wait(1000)}
+        ${wait(1500)} // Increased from 1000
         inputEl = findElement(inputSelectors);
       }
       
@@ -389,13 +389,13 @@ function createInjectionScript(service, text) {
       }
       
       await insertText(inputEl, text);
-      ${wait(500)}
+      ${wait(1000)} // Increased from 500
       
       let submitBtn = null;
       for (let i = 0; i < 10; i++) {
         submitBtn = findElement(submitSelectors);
         if (submitBtn && !submitBtn.disabled) break;
-        ${wait(200)}
+        ${wait(300)} // Increased from 200
         submitBtn = null;
       }
       
@@ -1365,53 +1365,83 @@ function toggleConversationMode() {
   const toggleBtn = document.getElementById('conversation-mode-toggle');
 
   if (conversationMode) {
-    // Save current state
+    // 1. Save current state
     previousLayout = {
       activeServices: [...userSettings.activeServices],
-      layout: userSettings.layout
+      layout: userSettings.layout,
+      focused: focusedService
     };
+    if (focusedService) exitFocus(); // Exit focus mode if active
 
-    // Show conversation panel
+    // 2. Show conversation panel ONLY
     panel.classList.remove('hidden');
     toggleBtn.classList.add('active');
-    toggleBtn.textContent = '✓ Conversation';
+    toggleBtn.textContent = '✓ ' + I18N.t('btnConversation');
 
-    // Hide all normal service tabs
+    // 3. Hide ALL service webviews
     document.querySelectorAll('.webview-container').forEach(container => {
       if (container.id !== 'conversation-panel-container') {
-        container.classList.add('hidden-conversation-mode');
+        container.classList.add('hidden-by-conversation-mode');
       }
     });
+    
+    // Hide status bar toggles
+    statusBar.classList.add('hidden-by-conversation-mode');
+    webviewGrid.classList.add('conversation-mode-active');
+    
+    console.log('[ConversationMode] Activated - showing control panel.');
 
-    // Hide status bar
-    document.querySelectorAll('.status-item').forEach(item => {
-      item.style.display = 'none';
-    });
-
-    console.log('[ConversationMode] Activated - only showing conversation control');
   } else {
-    // Hide conversation panel
+    // --- EXITING CONVERSATION MODE ---
+    
+    // 1. Hide conversation panel
     panel.classList.add('hidden');
     toggleBtn.classList.remove('active');
-    toggleBtn.textContent = '💬 Conversation';
-    webviewGrid.classList.remove('conversation-mode');
+    toggleBtn.textContent = '💬 ' + I18N.t('btnConversation');
+    webviewGrid.classList.remove('conversation-mode-active');
 
-    // Restore all services to previous state
-    showAllServices();
-
-    // Restore previous active services
-    if (previousLayout) {
-      userSettings.activeServices = [...previousLayout.activeServices];
-      applyLayout(previousLayout.layout);
-      previousLayout = null;
-    }
-
-    // Stop conversation if running
+    // 2. Stop any running conversation
     if (conversationController && conversationController.getState() !== 'IDLE' && conversationController.getState() !== 'COMPLETED') {
       conversationController.stop();
     }
+    
+    // 3. Hide all conversation-related webviews
+    document.querySelectorAll('.webview-container').forEach(container => {
+        container.classList.remove('hidden-by-conversation-mode');
+    });
 
-    console.log('[ConversationMode] Deactivated - restored previous state');
+    // 4. Restore previous state
+    if (previousLayout) {
+      userSettings.activeServices = [...previousLayout.activeServices];
+      applyLayout(previousLayout.layout);
+      
+      // Restore active services by hiding inactive ones
+      const allServiceIds = config.services.map(s => s.id);
+      allServiceIds.forEach(id => {
+          const container = document.getElementById(`${id}-container`);
+          if (container) {
+              if (userSettings.activeServices.includes(id)) {
+                  container.classList.remove('hidden');
+              } else {
+                  container.classList.add('hidden');
+              }
+          }
+      });
+      
+      // Restore focus if it was active
+      if (previousLayout.focused) {
+          enterFocus(previousLayout.focused);
+      }
+
+      previousLayout = null;
+    }
+    
+    // 5. Restore UI elements
+    buildStatusBar(); // Re-build to restore checkboxes and states
+    updateGridCount();
+    statusBar.classList.remove('hidden-by-conversation-mode');
+
+    console.log('[ConversationMode] Deactivated - restored previous state.');
   }
 }
 
@@ -1445,23 +1475,31 @@ function loadServices() {
   console.log('[ConversationMode] Loading services:', serviceAId, serviceBId);
 
   if (serviceAId === serviceBId) {
-    // Create duplicate instances
-    setupDualServiceInstances(serviceAId);
-  } else {
-    // Use different services
-    conversationServiceA = config.services.find(s => s.id === serviceAId);
-    conversationServiceB = config.services.find(s => s.id === serviceBId);
+    alert('Bitte wähle zwei verschiedene Services aus.');
+    return;
   }
+  
+  conversationServiceA = config.services.find(s => s.id === serviceAId);
+  conversationServiceB = config.services.find(s => s.id === serviceBId);
 
   if (!conversationServiceA || !conversationServiceB) {
     alert('Fehler beim Laden der Services!');
     return;
   }
+  
+  // Make only the two selected services visible
+  const conversationServiceIds = [serviceAId, serviceBId];
+  document.querySelectorAll('.webview-container').forEach(container => {
+    const serviceId = container.dataset.service;
+    if (serviceId && conversationServiceIds.includes(serviceId)) {
+      container.classList.remove('hidden-by-conversation-mode');
+    } else if (serviceId) {
+      container.classList.add('hidden-by-conversation-mode');
+    }
+  });
 
-  // Show service tabs
-  hideNonConversationServices();
 
-  // Enable start button after services are loaded
+  // Enable start button after a short delay to allow webviews to become visible
   setTimeout(() => {
     document.getElementById('start-conversation').disabled = false;
     document.getElementById('load-services').textContent = '✓ Services Loaded';
@@ -1584,58 +1622,6 @@ function createConversationWebview(service, badge) {
   webviews[service.id] = webview;
 
   console.log('[ConversationMode] Created webview for:', service.name);
-}
-
-function hideNonConversationServices() {
-  // Update conversationServices array for CSS-based hiding
-  conversationServices = [conversationServiceA.id, conversationServiceB.id];
-
-  const allContainers = document.querySelectorAll('.webview-container');
-  allContainers.forEach(container => {
-    const id = container.id.replace('-container', '');
-
-    // Keep conversation-panel-container visible
-    if (id === 'conversation-panel') {
-      container.classList.remove('hidden-conversation-mode');
-      return;
-    }
-
-    // Add/remove .conversation-active for CSS-based hiding
-    if (conversationServices.includes(id)) {
-      container.classList.add('conversation-active');
-      container.classList.remove('hidden-conversation-mode');
-    } else {
-      container.classList.remove('conversation-active');
-      container.classList.add('hidden-conversation-mode');
-
-      // Also hide status bar entries for non-conversation services
-      const statusItem = document.querySelector(`.status-item[data-service="${id}"]`);
-      if (statusItem) statusItem.style.display = 'none';
-    }
-  });
-
-  // Ensure status bar entries for conversation services are visible
-  conversationServices.forEach(serviceId => {
-    const statusItem = document.querySelector(`.status-item[data-service="${serviceId}"]`);
-    if (statusItem) statusItem.style.display = '';
-  });
-}
-
-function showAllServices() {
-  // Clear conversation services array
-  conversationServices = [];
-
-  // Remove conversation-related classes and restore visibility
-  document.querySelectorAll('.webview-container').forEach(container => {
-    container.classList.remove('hidden-conversation-mode');
-    container.classList.remove('conversation-active');
-    container.style.display = '';
-  });
-
-  // Restore status bar entries
-  document.querySelectorAll('.status-item').forEach(item => {
-    item.style.display = '';
-  });
 }
 
 function pauseConversation() {
