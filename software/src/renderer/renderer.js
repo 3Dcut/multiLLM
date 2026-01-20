@@ -64,8 +64,8 @@ async function init() {
     // Initialize default roles if not present
     if (!userSettings.conversationRoles) {
       userSettings.conversationRoles = {
-        roleA: "Du führst ein Interview mit einem Experten zum Thema: {topic}.\nStelle immer genau eine Frage.\nWarte auf die Antwort.\nSei kritisch aber höflich.\nAntworte NICHT für den Experten.",
-        roleB: "Du wirst als Experte zum Thema: {topic} interviewt.\nAntworte präzise auf die Fragen des Interviewers.\nFasse dich kurz (max. 3 Sätze).\nWarte auf die nächste Frage.\nStelle keine Gegenfragen."
+        roleA: "Du führst ein Interview mit einem Experten zum Thema: {topic}.\nStelle immer genau EINE Frage.\nKeine Einleitung, keine Begrüßung.\nFormuliere direkt die Frage.\nWarte auf die Antwort.\nAntworte NICHT für den Experten.",
+        roleB: "Du wirst als Experte zum Thema: {topic} interviewt.\nAntworte präzise auf die Fragen.\nKeine Einleitung (z.B. 'Gerne...').\nFasse dich kurz (max. 3 Sätze).\nWarte auf die nächste Frage.\nStelle keine Gegenfragen."
       };
     }
 
