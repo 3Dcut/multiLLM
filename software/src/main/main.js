@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, clipboard } = require('electron');
+const { app, BrowserWindow, session, ipcMain, clipboard, Menu, MenuItem } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -68,7 +68,7 @@ function saveUserSettings(settings) {
 function createWindow() {
   // Settings laden um Sprache zu initialisieren
   loadUserSettings();
-  
+
   mainWindow = new BrowserWindow({
     width: 1920,
     height: 1080,
@@ -87,7 +87,7 @@ function createWindow() {
   // Header-Manipulation: X-Frame-Options und CSP entfernen
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = { ...details.responseHeaders };
-    
+
     const headersToRemove = [
       'x-frame-options',
       'X-Frame-Options',
@@ -96,11 +96,11 @@ function createWindow() {
       'content-security-policy-report-only',
       'Content-Security-Policy-Report-Only'
     ];
-    
+
     headersToRemove.forEach(header => {
       delete responseHeaders[header];
     });
-    
+
     callback({ responseHeaders });
   });
 
@@ -112,7 +112,7 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, '..', 'ui', 'index.html'));
-  
+
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools();
   }
@@ -185,6 +185,64 @@ ipcMain.handle('set-language', (event, lang) => {
     return true;
   }
   return false;
+});
+
+// Context Menu Handler
+ipcMain.on('show-context-menu', (event, params) => {
+  const menu = new Menu();
+
+  // Helper to add item if role logic allows (simple roles work automatically on focused window)
+  // For webviews, we might need to send a command back, but 'role' usually works 
+  // if the webview has focus. Let's try standard roles first.
+
+  // Cut
+  menu.append(new MenuItem({
+    label: 'Ausschneiden',
+    role: 'cut',
+    enabled: params.editFlags.canCut
+  }));
+
+  // Copy
+  menu.append(new MenuItem({
+    label: 'Kopieren',
+    role: 'copy',
+    enabled: params.editFlags.canCopy
+  }));
+
+  // Paste
+  menu.append(new MenuItem({
+    label: 'Einfügen',
+    role: 'paste',
+    // Paste is often always enabled in edit fields, but we can check if clipboard has text
+    // params.editFlags.canPaste is reliable in Electron
+    enabled: params.editFlags.canPaste
+  }));
+
+  menu.append(new MenuItem({ type: 'separator' }));
+
+  // Select All
+  menu.append(new MenuItem({
+    label: 'Alles auswählen',
+    role: 'selectAll',
+    enabled: params.editFlags.canSelectAll
+  }));
+
+  // Inspect Element (Development only, optionally)
+  // if (process.env.NODE_ENV === 'development') {
+  //   menu.append(new MenuItem({ type: 'separator' }));
+  //   menu.append(new MenuItem({
+  //     label: 'Untersuchen',
+  //     click: () => {
+  //       // We would need the webContents of the sender. 
+  //       // Since the sender is the renderer, and the event happened in a webview, 
+  //       // we might not target the right one easily without more info.
+  //       // Keeping it simple for now (Copy/Paste focus).
+  //     }
+  //   }));
+  // }
+
+  const win = BrowserWindow.fromWebContents(event.sender);
+  menu.popup({ window: win, x: params.x, y: params.y });
 });
 
 app.whenReady().then(() => {

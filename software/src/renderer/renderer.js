@@ -113,6 +113,19 @@ function buildStatusBar() {
   });
 }
 
+// Context Menu Helper
+function attachContextMenu(webview) {
+  webview.addEventListener('context-menu', (e) => {
+    e.preventDefault();
+    window.electronAPI.showContextMenu({
+      x: e.params.x,
+      y: e.params.y,
+      editFlags: e.params.editFlags,
+      selectionText: e.params.selectionText
+    });
+  });
+}
+
 // WebViews aufbauen
 function buildWebViews() {
   webviewGrid.innerHTML = '';
@@ -247,6 +260,8 @@ function buildWebViews() {
     webview.addEventListener('did-finish-load', () => updateStatus(service.id, 'ready'));
     webview.addEventListener('did-fail-load', () => updateStatus(service.id, 'error'));
     webview.addEventListener('console-message', (e) => console.log(`[${service.id}]`, e.message));
+
+    attachContextMenu(webview);
   });
 
   updateGridCount();
@@ -1736,6 +1751,8 @@ function createConversationWebview(service, badge) {
 
   // Store reference
   webviews[service.id] = webview;
+
+  attachContextMenu(webview);
 
   console.log('[ConversationMode] Created webview for:', service.name);
 }

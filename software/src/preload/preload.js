@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile: (filename) => ipcRenderer.invoke('read-file', filename),
   writeFile: (filename, data) => ipcRenderer.invoke('write-file', filename, data),
   setLanguage: (lang) => ipcRenderer.invoke('set-language', lang),
-  onConfigReady: (callback) => ipcRenderer.on('config-ready', (_event, ...args) => callback(...args))
+  onConfigReady: (callback) => ipcRenderer.on('config-ready', (_event, ...args) => callback(...args)),
+  showContextMenu: (params) => ipcRenderer.send('show-context-menu', params)
 });
