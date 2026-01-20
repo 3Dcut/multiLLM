@@ -96,7 +96,9 @@ class ConversationController {
     this.isPaused = false;
     this.retryCount = 0;
     this.repetitionCount = 0;
+    this.repetitionCount = 0;
     this.lastResponseText = '';
+    this.waitTimes = []; // Reset stats for new conversation
 
     this.setState(States.INITIALIZING);
 
@@ -270,84 +272,104 @@ class ConversationController {
     }
   }
 
-  /**
-   * Skip current delay
-   */
-  skipDelay() {
-    this.shouldSkipDelay = true;
-    console.log('[ConversationController] Skipping delay');
+    // State for adaptive delay
+    this.waitTimes = []; // Store actual wait durations without resetting on new start (or maybe reset? Let's reset for now to keep it per-session)
+// Actually, sticking to per-session is safer.
+this.currentWaitStart = 0;
   }
+
+/* ... (keeping existing skipDelay) ... */
+/**
+ * Skip current delay
+ */
+skipDelay() {
+  this.shouldSkipDelay = true;
+  console.log('[ConversationController] Skipping delay');
+}
 
   /**
    * Sleep function that triggers a countdown callback
    * Handles pausing by checking this.isPaused
    */
   async sleepWithCountdown(duration, tickCallback) {
-    let remainingMs = duration;
-    this.shouldSkipDelay = false; // Reset skip flag
+  let remainingMs = duration;
+  this.shouldSkipDelay = false; // Reset skip flag
+  const startTime = Date.now();
 
-    // Initial display
-    tickCallback(Math.ceil(remainingMs / 1000));
+  // Calculate current average
+  const getAverageWait = () => {
+    if (this.waitTimes.length === 0) return 0;
+    const sum = this.waitTimes.reduce((a, b) => a + b, 0);
+    return Math.round(sum / this.waitTimes.length / 1000); // in seconds
+  };
 
-    // Check every 100ms
-    const intervalTime = 100;
+  // Initial display
+  tickCallback(Math.ceil(remainingMs / 1000), getAverageWait());
 
-    while (remainingMs > 0 && !this.shouldStop && !this.shouldSkipDelay) {
-      // If paused, just wait without decrementing
-      if (this.isPaused) {
-        await window.ResponseMonitor.sleep(intervalTime);
-        continue;
-      }
+  // Check every 100ms
+  const intervalTime = 100;
 
+  while (remainingMs > 0 && !this.shouldStop && !this.shouldSkipDelay) {
+    // If paused, just wait without decrementing
+    if (this.isPaused) {
       await window.ResponseMonitor.sleep(intervalTime);
-      remainingMs -= intervalTime;
-
-      // Update display every second (approximately)
-      if (remainingMs % 1000 < intervalTime) {
-        tickCallback(Math.ceil(remainingMs / 1000));
-      }
+      continue;
     }
 
-    tickCallback(0); // Final clear
+    await window.ResponseMonitor.sleep(intervalTime);
+    remainingMs -= intervalTime;
+
+    // Update display every second (approximately)
+    if (remainingMs % 1000 < intervalTime) {
+      tickCallback(Math.ceil(remainingMs / 1000), getAverageWait());
+    }
   }
+
+  // Record actual wait time
+  const actualDuration = Date.now() - startTime;
+  this.waitTimes.push(actualDuration);
+  console.log(`[ConversationController] Wait finished. Actual: ${actualDuration}ms. Average: ${getAverageWait()}s`);
+
+  tickCallback(0, getAverageWait()); // Final clear
+}
 
   /**
    * Wait for response and extract it
    */
   async waitAndExtractResponse(serviceId, webview, service) {
-    const waitDuration = this.turnDelay; // Using the main delay for waiting
-    console.log(`[ConversationController] Waiting for fixed delay for ${serviceId}: ${waitDuration}ms`);
+  const waitDuration = this.turnDelay; // Using the main delay for waiting
+  console.log(`[ConversationController] Waiting for fixed delay for ${serviceId}: ${waitDuration}ms`);
 
-    try {
-      // Use sleep with countdown
-      await this.sleepWithCountdown(waitDuration, this.onCountdownUpdate);
+  try {
+    // Use sleep with countdown
+    await this.sleepWithCountdown(waitDuration, this.onCountdownUpdate);
 
-      console.log(`[ConversationController] Fixed delay finished for ${serviceId}. Extracting response.`);
+    console.log(`[ConversationController] Fixed delay finished for ${serviceId}. Extracting response.`);
 
-      // Extract response text
-      const responseText = await this.extractResponse(webview, service);
+    // Extract response text
+    const responseText = await this.extractResponse(webview, service);
 
-      if (responseText === null || typeof responseText === 'undefined') {
-        throw new Error(`Extracted null or undefined response from ${serviceId}.`);
-      }
-
-      console.log(`[ConversationController] Extracted response from ${serviceId}:`, responseText.substring(0, 100));
-
-      // Reset retry count on success
-      this.retryCount = 0;
-
-      return responseText;
-    } catch (error) {
-      console.error(`[ConversationController] Error waiting for response from ${serviceId}:`, error);
-      throw error;
+    if (responseText === null || typeof responseText === 'undefined') {
+      throw new Error(`Extracted null or undefined response from ${serviceId}.`);
     }
+
+    console.log(`[ConversationController] Extracted response from ${serviceId}:`, responseText.substring(0, 100));
+
+    // Reset retry count on success
+    this.retryCount = 0;
+
+    return responseText;
+  } catch (error) {
+    console.error(`[ConversationController] Error waiting for response from ${serviceId}:`, error);
+    throw error;
   }
+}
 
   /**
    * Extract response text from webview
    */
   async extractResponse(webview, service) {
-    const script = `
+  const script = `
       (function() {
         const selectors = ${JSON.stringify(service.responseSelectors)};
         let responseText = '';
@@ -366,21 +388,21 @@ class ConversationController {
       })();
     `;
 
-    return await webview.executeJavaScript(script);
-  }
+  return await webview.executeJavaScript(script);
+}
 
-  /**
-   * Create injection script for sending messages
-   * (Uses the robust version from renderer.js)
-   */
-  createInjectionScript(service, text) {
-    const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\`').replace(/\$/g, '\\$');
-    const editorType = service.editorType || 'default';
+/**
+ * Create injection script for sending messages
+ * (Uses the robust version from renderer.js)
+ */
+createInjectionScript(service, text) {
+  const escapedText = text.replace(/\\/g, '\\\\').replace(/`/g, '\`').replace(/\$/g, '\\$');
+  const editorType = service.editorType || 'default';
 
-    // Helper functions to be injected, same as in renderer.js
-    const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
+  // Helper functions to be injected, same as in renderer.js
+  const wait = (ms) => `await new Promise(r => setTimeout(r, ${ms}));`;
 
-    const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
+  const findElementFn = (serviceId, log = false) => `function findElement(selectors) {
       for (const selector of selectors) {
         try {
           const el = document.querySelector(selector);
@@ -393,7 +415,7 @@ class ConversationController {
       return null;
     }`;
 
-    const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
+  const insertTextFn = (serviceId, editorType) => `async function insertText(element, text) {
       element.focus();
       ${wait(100)}
       if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
@@ -431,8 +453,8 @@ class ConversationController {
       return false;
     }`;
 
-    // The main script, assembled from the helpers
-    return `
+  // The main script, assembled from the helpers
+  return `
       (async function() {
         const text = \`${escapedText}\`;
         const inputSelectors = ${JSON.stringify(service.inputSelectors)};
@@ -479,190 +501,190 @@ class ConversationController {
         return { success: true, method: 'enter' };
       })();
     `;
-  }
+}
 
-  /**
-   * Check for repetitive responses
-   */
-  checkRepetition(responseText) {
-    const normalized = responseText.trim().toLowerCase();
+/**
+ * Check for repetitive responses
+ */
+checkRepetition(responseText) {
+  const normalized = responseText.trim().toLowerCase();
 
-    if (normalized === this.lastResponseText) {
-      this.repetitionCount++;
-      if (this.repetitionCount >= 3) {
-        return true; // Stop conversation
-      }
-    } else {
-      this.repetitionCount = 0;
+  if (normalized === this.lastResponseText) {
+    this.repetitionCount++;
+    if (this.repetitionCount >= 3) {
+      return true; // Stop conversation
     }
-
-    this.lastResponseText = normalized;
-    return false;
+  } else {
+    this.repetitionCount = 0;
   }
 
-  /**
-   * Pause conversation
-   */
-  pause() {
-    console.log('[ConversationController] Pausing conversation');
-    this.isPaused = true;
-    this.setState(States.PAUSED);
+  this.lastResponseText = normalized;
+  return false;
+}
+
+/**
+ * Pause conversation
+ */
+pause() {
+  console.log('[ConversationController] Pausing conversation');
+  this.isPaused = true;
+  this.setState(States.PAUSED);
+}
+
+/**
+ * Resume conversation
+ */
+resume() {
+  console.log('[ConversationController] Resuming conversation');
+  this.isPaused = false;
+
+  // Restore previous state
+  if (this.currentTurn % 2 === 0) {
+    this.setState(States.WAITING_FOR_A);
+  } else {
+    this.setState(States.WAITING_FOR_B);
   }
+}
 
-  /**
-   * Resume conversation
-   */
-  resume() {
-    console.log('[ConversationController] Resuming conversation');
-    this.isPaused = false;
+/**
+ * Stop conversation
+ */
+stop() {
+  console.log('[ConversationController] Stopping conversation');
+  this.shouldStop = true;
+  this.setState(States.COMPLETED);
+}
 
-    // Restore previous state
-    if (this.currentTurn % 2 === 0) {
-      this.setState(States.WAITING_FOR_A);
-    } else {
-      this.setState(States.WAITING_FOR_B);
-    }
+/**
+ * Add message to transcript
+ */
+addToTranscript(speaker, message, turn) {
+  this.transcript.push({
+    timestamp: new Date().toISOString(),
+    speaker: speaker,
+    message: message,
+    turn: turn
+  });
+
+  // Auto-save transcript
+  this.saveTranscript();
+}
+
+/**
+ * Save transcript to file
+ */
+saveTranscript() {
+  if (typeof window !== 'undefined' && window.electronAPI) {
+    const transcriptData = {
+      serviceA: this.serviceA ? this.serviceA.id : null,
+      serviceB: this.serviceB ? this.serviceB.id : null,
+      startTime: this.transcript.length > 0 ? this.transcript[0].timestamp : null,
+      endTime: this.transcript.length > 0 ? this.transcript[this.transcript.length - 1].timestamp : null,
+      turns: this.currentTurn,
+      messages: this.transcript
+    };
+
+    window.electronAPI.writeFile('conversation-history.json', JSON.stringify(transcriptData, null, 2))
+      .catch(error => console.error('[ConversationController] Error saving transcript:', error));
   }
-
-  /**
-   * Stop conversation
-   */
-  stop() {
-    console.log('[ConversationController] Stopping conversation');
-    this.shouldStop = true;
-    this.setState(States.COMPLETED);
-  }
-
-  /**
-   * Add message to transcript
-   */
-  addToTranscript(speaker, message, turn) {
-    this.transcript.push({
-      timestamp: new Date().toISOString(),
-      speaker: speaker,
-      message: message,
-      turn: turn
-    });
-
-    // Auto-save transcript
-    this.saveTranscript();
-  }
-
-  /**
-   * Save transcript to file
-   */
-  saveTranscript() {
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      const transcriptData = {
-        serviceA: this.serviceA ? this.serviceA.id : null,
-        serviceB: this.serviceB ? this.serviceB.id : null,
-        startTime: this.transcript.length > 0 ? this.transcript[0].timestamp : null,
-        endTime: this.transcript.length > 0 ? this.transcript[this.transcript.length - 1].timestamp : null,
-        turns: this.currentTurn,
-        messages: this.transcript
-      };
-
-      window.electronAPI.writeFile('conversation-history.json', JSON.stringify(transcriptData, null, 2))
-        .catch(error => console.error('[ConversationController] Error saving transcript:', error));
-    }
-  }
+}
 
   /**
    * Export transcript in various formats
    */
   async exportTranscript(format = 'json') {
-    const transcriptData = {
-      serviceA: this.serviceA.id,
-      serviceB: this.serviceB.id,
-      startTime: this.transcript[0].timestamp,
-      endTime: this.transcript[this.transcript.length - 1].timestamp,
-      turns: this.currentTurn,
-      messages: this.transcript
-    };
+  const transcriptData = {
+    serviceA: this.serviceA.id,
+    serviceB: this.serviceB.id,
+    startTime: this.transcript[0].timestamp,
+    endTime: this.transcript[this.transcript.length - 1].timestamp,
+    turns: this.currentTurn,
+    messages: this.transcript
+  };
 
-    let content = '';
-    let filename = `conversation-${Date.now()}`;
+  let content = '';
+  let filename = `conversation-${Date.now()}`;
 
-    if (format === 'json') {
-      content = JSON.stringify(transcriptData, null, 2);
-      filename += '.json';
-    } else if (format === 'txt') {
-      content = this.transcript.map(entry => {
-        return `[${entry.timestamp}] ${entry.speaker}:
+  if (format === 'json') {
+    content = JSON.stringify(transcriptData, null, 2);
+    filename += '.json';
+  } else if (format === 'txt') {
+    content = this.transcript.map(entry => {
+      return `[${entry.timestamp}] ${entry.speaker}:
 ${entry.message}
 `;
-      }).join('\n---\n\n');
-      filename += '.txt';
-    } else if (format === 'markdown') {
-      content = `# Conversation: ${this.serviceA.name} ↔ ${this.serviceB.name}\n\n`;
-      content += `**Start:** ${transcriptData.startTime}\n`;
-      content += `**End:** ${transcriptData.endTime}\n`;
-      content += `**Turns:** ${transcriptData.turns}\n\n`;
+    }).join('\n---\n\n');
+    filename += '.txt';
+  } else if (format === 'markdown') {
+    content = `# Conversation: ${this.serviceA.name} ↔ ${this.serviceB.name}\n\n`;
+    content += `**Start:** ${transcriptData.startTime}\n`;
+    content += `**End:** ${transcriptData.endTime}\n`;
+    content += `**Turns:** ${transcriptData.turns}\n\n`;
+    content += `---\n\n`;
+
+    this.transcript.forEach(entry => {
+      content += `## Turn ${entry.turn}: ${entry.speaker}\n`;
+      content += `*${entry.timestamp}*\n\n`;
+      content += `${entry.message}\n\n`;
       content += `---\n\n`;
+    });
 
-      this.transcript.forEach(entry => {
-        content += `## Turn ${entry.turn}: ${entry.speaker}\n`;
-        content += `*${entry.timestamp}*\n\n`;
-        content += `${entry.message}\n\n`;
-        content += `---\n\n`;
-      });
-
-      filename += '.md';
-    }
-
-    return { content, filename };
+    filename += '.md';
   }
 
-  /**
-   * Set state and notify
-   */
-  setState(newState) {
-    const oldState = this.state;
-    this.state = newState;
-    console.log(`[ConversationController] State: ${oldState} -> ${newState}`);
-    this.onStateChange(newState, oldState);
+  return { content, filename };
+}
 
-    // ADDED: Clear countdown when not waiting
-    if (newState !== States.WAITING_FOR_A && newState !== States.WAITING_FOR_B) {
-      this.onCountdownUpdate(0);
-    }
-  }
+/**
+ * Set state and notify
+ */
+setState(newState) {
+  const oldState = this.state;
+  this.state = newState;
+  console.log(`[ConversationController] State: ${oldState} -> ${newState}`);
+  this.onStateChange(newState, oldState);
 
-  /**
-   * Handle error
-   */
-  handleError(error) {
-    console.error('[ConversationController] Error:', error);
-    this.setState(States.ERROR);
-    this.onError(error);
+  // ADDED: Clear countdown when not waiting
+  if (newState !== States.WAITING_FOR_A && newState !== States.WAITING_FOR_B) {
+    this.onCountdownUpdate(0);
   }
+}
 
-  /**
-   * Get current state
-   */
-  getState() {
-    return this.state;
-  }
+/**
+ * Handle error
+ */
+handleError(error) {
+  console.error('[ConversationController] Error:', error);
+  this.setState(States.ERROR);
+  this.onError(error);
+}
 
-  /**
-   * Get transcript
-   */
-  getTranscript() {
-    return this.transcript;
-  }
+/**
+ * Get current state
+ */
+getState() {
+  return this.state;
+}
 
-  /**
-   * Get conversation stats
-   */
-  getStats() {
-    return {
-      state: this.state,
-      currentTurn: this.currentTurn,
-      maxTurns: this.maxTurns,
-      messageCount: this.transcript.length,
-      isPaused: this.isPaused
-    };
-  }
+/**
+ * Get transcript
+ */
+getTranscript() {
+  return this.transcript;
+}
+
+/**
+ * Get conversation stats
+ */
+getStats() {
+  return {
+    state: this.state,
+    currentTurn: this.currentTurn,
+    maxTurns: this.maxTurns,
+    messageCount: this.transcript.length,
+    isPaused: this.isPaused
+  };
+}
 }
 
 // Export for use in renderer (make globally available)

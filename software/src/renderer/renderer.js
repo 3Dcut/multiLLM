@@ -215,7 +215,10 @@ function buildWebViews() {
           <button id="start-conversation" class="btn-primary" disabled>▶ Start</button>
           <button id="pause-conversation" class="btn-secondary" disabled>⏸ Pause</button>
           <button id="resume-conversation" class="btn-secondary hidden" disabled>▶ Resume</button>
-          <button id="skip-countdown" class="btn-secondary" style="display: none;">⏩ Skip</button>
+          <div id="delay-controls" style="display: none; align-items: center; gap: 5px;">
+             <button id="skip-countdown" class="btn-secondary">⏩ Skip</button>
+             <button id="set-avg-delay" class="btn-secondary" title="Setze Verzögerung auf Durchschnitt">⏱ Set Delay (<span id="avg-delay-val">0</span>s)</button>
+          </div>
           <button id="stop-conversation" class="btn-danger" disabled>⏹ Stop</button>
           <button id="export-conversation" class="btn-secondary" disabled>💾 Export</button>
         </div>
@@ -1961,6 +1964,19 @@ function setupConversationEventListeners() {
   document.getElementById('resume-conversation').addEventListener('click', resumeConversation);
   document.getElementById('stop-conversation').addEventListener('click', stopConversation);
   document.getElementById('skip-countdown').addEventListener('click', () => conversationController.skipDelay());
+  document.getElementById('set-avg-delay').addEventListener('click', () => {
+    const avgText = document.getElementById('avg-delay-val').textContent;
+    const avg = parseInt(avgText, 10);
+    if (avg > 0) {
+      const input = document.getElementById('turn-delay');
+      if (input) {
+        input.value = avg;
+        // Update controller live if possible, or just next turn
+        conversationController.turnDelay = avg * 1000;
+        console.log('[ConversationMode] Updated turn delay to', avg, 'seconds');
+      }
+    }
+  });
   document.getElementById('export-conversation').addEventListener('click', exportConversation);
   document.getElementById('clear-transcript').addEventListener('click', clearTranscript);
 
