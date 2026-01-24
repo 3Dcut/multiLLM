@@ -979,88 +979,13 @@ async function compareAll() {
   }
 }
 
-// Vote-Erkennungs-Strategien
-const voteStrategies = {
-  pattern: (text) => {
-    const start = text.substring(0, 200).toLowerCase();
-    const isJa = VotePatterns.jaPatterns.some(p => p.test(start));
-    const isNein = VotePatterns.neinPatterns.some(p => p.test(start));
-    if (isJa && !isNein) return 'ja';
-    if (isNein && !isJa) return 'nein';
-    return 'unklar';
-  },
-
-  first: (text) => {
-    const start = text.substring(0, 150).toLowerCase();
-    const jaMatch = start.match(/(?:^|[.!?]\s*)(ja|yes|jawohl|genau|absolut|definitiv)[\s\.,!\-–:;,\n\r]/i);
-    const neinMatch = start.match(/(?:^|[.!?]\s*)(nein|no|nicht|keineswegs|niemals)[\s\.,!\-–:;,\n\r]/i);
-    if (!jaMatch && !neinMatch) return 'unklar';
-    if (jaMatch && !neinMatch) return 'ja';
-    if (neinMatch && !jaMatch) return 'nein';
-    return jaMatch.index < neinMatch.index ? 'ja' : 'nein';
-  },
-
-  count: (text) => {
-    const start = text.substring(0, 200).toLowerCase();
-    const jaCount = (start.match(/\b(ja|yes|jawohl)\b/gi) || []).length;
-    const neinCount = (start.match(/\b(nein|no|nicht)\b/gi) || []).length;
-    if (jaCount === 0 && neinCount === 0) return 'unklar';
-    if (jaCount > neinCount) return 'ja';
-    if (neinCount > jaCount) return 'nein';
-    return 'unklar';
-  },
-
-  weighted: (text) => {
-    const start = text.substring(0, 250).toLowerCase();
-    let jaScore = 0, neinScore = 0;
-
-    const getWeight = (pos) => {
-      const before = text.substring(Math.max(0, pos - 5), pos);
-      const isAfterSentence = /[.!?\n]\s*$/.test(before) || pos < 3;
-      if (isAfterSentence && pos < 50) return 10;
-      if (pos < 50) return 5;
-      if (pos < 150) return 2;
-      return 1;
-    };
-
-    const jaWordsRegex = new RegExp('\\b(' + VotePatterns.jaWords.join('|') + ')\\b', 'gi');
-    const neinWordsRegex = new RegExp('\\b(' + VotePatterns.neinWords.join('|') + ')\\b', 'gi');
-
-    let match;
-    while ((match = jaWordsRegex.exec(start)) !== null) jaScore += getWeight(match.index);
-    while ((match = neinWordsRegex.exec(start)) !== null) neinScore += getWeight(match.index);
-
-    if (jaScore === 0 && neinScore === 0) return 'unklar';
-    if (jaScore >= 5 && jaScore > neinScore) return 'ja';
-    if (neinScore >= 5 && neinScore > jaScore) return 'nein';
-    return 'unklar';
-  }
-};
-
-function detectVote(text, strategy) {
-  const cleanedText = VotePatterns.cleanText(text);
-  const lowerText = cleanedText.toLowerCase();
-
-  if (VotePatterns.isMeta(lowerText) || VotePatterns.isUnclear(lowerText)) {
-    return 'unklar';
-  }
-
-  if (strategy === 'weighted') {
-    const patternResult = voteStrategies.pattern(lowerText);
-    if (patternResult !== 'unklar') return patternResult;
-    return voteStrategies.weighted(lowerText);
-  }
-
-  return voteStrategies[strategy]?.(lowerText) || 'unklar';
-}
-
 async function evaluateYesNo() {
   const responses = await getAllResponses();
   const votes = { ja: [], nein: [], unklar: [] };
   const strategy = config.voteStrategy || 'weighted';
 
   for (const [serviceId, data] of Object.entries(responses)) {
-    const result = detectVote(data.text, strategy);
+    const result = VotingLogic.detectVote(data.text, strategy);
     votes[result].push({ id: serviceId, name: data.name });
   }
 
