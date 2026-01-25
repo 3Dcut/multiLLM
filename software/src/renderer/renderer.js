@@ -968,15 +968,17 @@ async function compareAll() {
     comparePrompt += `${I18N.t('compareAnswerPrefix')} ${data.name} ===\n${data.text}\n\n`;
   });
 
-  for (const serviceId of userSettings.activeServices) {
+  const promises = userSettings.activeServices.map(async (serviceId) => {
     const service = config.services.find(s => s.id === serviceId);
-    if (!service) continue;
+    if (!service) return;
     try {
       await webviews[serviceId].executeJavaScript(createInjectionScript(service, comparePrompt));
     } catch (e) {
       console.error(`[${serviceId}] Compare-all failed:`, e);
     }
-  }
+  });
+
+  await Promise.all(promises);
 }
 
 async function evaluateYesNo() {
