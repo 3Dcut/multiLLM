@@ -995,24 +995,36 @@ async function evaluateYesNo() {
 }
 
 let lastVotes = null;
+let voteOverlays = [];
+
+function removeVoteOverlays() {
+  voteOverlays.forEach(el => el.remove());
+  voteOverlays = [];
+}
 
 function resetVotes() {
   lastVotes = null;
   const voteDisplay = document.getElementById('vote-display');
   if (voteDisplay) voteDisplay.innerHTML = '';
-  document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
+  removeVoteOverlays();
 }
 
 function fadeOutOverlays() {
-  document.querySelectorAll('.vote-overlay').forEach(overlay => {
+  voteOverlays.forEach(overlay => {
     overlay.classList.add('fade-out');
-    setTimeout(() => overlay.remove(), 500);
+    setTimeout(() => {
+      overlay.remove();
+      const index = voteOverlays.indexOf(overlay);
+      if (index > -1) {
+        voteOverlays.splice(index, 1);
+      }
+    }, 500);
   });
 }
 
 function showVoteOverlays(show) {
   if (!lastVotes || !show) {
-    document.querySelectorAll('.vote-overlay').forEach(el => el.remove());
+    removeVoteOverlays();
     return;
   }
 
@@ -1023,6 +1035,7 @@ function showVoteOverlays(show) {
         const overlay = document.createElement('div');
         overlay.className = `vote-overlay ${colorClass}`;
         container.appendChild(overlay);
+        voteOverlays.push(overlay);
       }
     });
   };
