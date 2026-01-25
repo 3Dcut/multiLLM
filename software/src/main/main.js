@@ -55,14 +55,24 @@ function loadUserSettings() {
   }
 }
 
-function saveUserSettings(settings) {
-  try {
-    fs.writeFileSync(userSettingsPath, JSON.stringify(settings, null, 2), 'utf8');
-    return true;
-  } catch (e) {
-    console.error('Error saving user-settings.json:', e);
-    return false;
-  }
+let saveSettingsPromise = Promise.resolve();
+
+async function saveUserSettings(settings) {
+  // Serialize writes to prevent race conditions
+  const currentSave = saveSettingsPromise.then(async () => {
+    try {
+      await fs.promises.writeFile(userSettingsPath, JSON.stringify(settings, null, 2), 'utf8');
+      return true;
+    } catch (e) {
+      console.error('Error saving user-settings.json:', e);
+      return false;
+    }
+  });
+
+  // Ensure the chain continues even if one fails
+  saveSettingsPromise = currentSave.catch(() => {});
+
+  return currentSave;
 }
 
 function createWindow() {
@@ -138,8 +148,8 @@ ipcMain.handle('get-user-settings', () => {
   return loadUserSettings();
 });
 
-ipcMain.handle('save-user-settings', (event, settings) => {
-  return saveUserSettings(settings);
+ipcMain.handle('save-user-settings', async (event, settings) => {
+  return await saveUserSettings(settings);
 });
 
 // Clipboard Handler
