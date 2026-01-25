@@ -176,10 +176,10 @@ ipcMain.handle('read-file', (event, filename) => {
   }
 });
 
-ipcMain.handle('write-file', (event, filename, data) => {
+ipcMain.handle('write-file', async (event, filename, data) => {
   try {
     const filePath = path.join(rootDir, filename);
-    fs.writeFileSync(filePath, data, 'utf8');
+    await fs.promises.writeFile(filePath, data, 'utf8');
     return true;
   } catch (e) {
     console.error('Error writing file:', filename, e);
