@@ -294,11 +294,16 @@ function updateGridCount() {
   webviewGrid.classList.add(`count-${activeCount}`);
 }
 
+let cachedLayoutBtns = null;
 function applyLayout(layout) {
   webviewGrid.classList.remove('layout-grid', 'layout-horizontal', 'layout-vertical');
   webviewGrid.classList.add(`layout-${layout}`);
 
-  document.querySelectorAll('.layout-btn').forEach(btn => {
+  if (!cachedLayoutBtns) {
+    cachedLayoutBtns = document.querySelectorAll('.layout-btn');
+  }
+
+  cachedLayoutBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.layout === layout);
   });
 
